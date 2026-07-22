@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections import deque
+from collections import Counter, deque
 from dataclasses import asdict, dataclass
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
@@ -44,6 +44,25 @@ _SKIP_EXTENSIONS = {
     ".zip",
 }
 
+_NETWORK_IDLE_WARNING = "network did not become idle before collection"
+
+
+def summarize_warnings(warnings: list[str]) -> list[str]:
+    """Collapse identical warnings while preserving their first-seen order."""
+    counts = Counter(warnings)
+    return [
+        warning if counts[warning] == 1 else f"{warning} ({counts[warning]} occurrences)"
+        for warning in dict.fromkeys(warnings)
+    ]
+
+
+def collection_status_from_warnings(warnings: list[str]) -> str:
+    if any(warning.startswith("page collection failed:") for warning in warnings):
+        return "failed"
+    if _NETWORK_IDLE_WARNING in warnings:
+        return "partial"
+    return "complete"
+
 
 def is_safe_crawl_link(url: str) -> bool:
     parsed = urlsplit(url)
@@ -67,6 +86,8 @@ class PageArtifact:
         data = asdict(self)
         data.pop("rendered_dom")
         data.pop("javascript")
+        data["warnings"] = summarize_warnings(self.warnings)
+        data["collection_status"] = collection_status_from_warnings(self.warnings)
         return data
 
 
@@ -218,7 +239,7 @@ class BrowserCrawler:
                 timeout=min(self.settings.request_timeout_seconds, 5) * 1000,
             )
         except Exception:
-            warnings.append("network did not become idle before collection")
+            warnings.append(_NETWORK_IDLE_WARNING)
 
         final_url = await self.policy.validate(page.url)
         if not same_origin(target_origin_url, final_url):
