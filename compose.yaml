@@ -52,7 +52,7 @@ services:
     command:
       - /bin/sh
       - -c
-      - exec rq worker "$${QUEUE_NAME}" --url "$${REDIS_URL}" --logging-level INFO
+      - exec rq worker "$${QUEUE_NAME}" --url "$${REDIS_URL}" --logging_level INFO
     shm_size: 1gb
     read_only: true
 
