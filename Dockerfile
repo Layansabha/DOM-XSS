@@ -17,6 +17,7 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get upgrade --yes --no-install-recommends \
+    && apt-get install --yes --no-install-recommends python3.12-venv \
     && apt-get autoremove --yes \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
