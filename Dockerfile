@@ -3,7 +3,8 @@ FROM mcr.microsoft.com/playwright/python:v1.61.0-noble
 ARG APP_UID=10001
 ARG APP_GID=10001
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -11,6 +12,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HOME=/home/app
 
 WORKDIR /app
+
+RUN apt-get update \
+    && apt-get upgrade --yes --no-install-recommends \
+    && apt-get autoremove --yes \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid "${APP_GID}" app \
     && useradd --uid "${APP_UID}" --gid "${APP_GID}" --create-home --shell /usr/sbin/nologin app
