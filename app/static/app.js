@@ -37,6 +37,12 @@ function renderResults(data) {
     const ml = page.ml || {};
     const riskClass = ml.vulnerable ? "risk-high" : "risk-low";
     const score = ml.status === "scored" ? percentage(ml.probability) : "Not scored";
+    const collectionStatus = page.collection_status || "complete";
+    const collectionBadge = collectionStatus === "partial"
+      ? '<span class="collection-pill collection-partial">Partial scan</span>'
+      : (collectionStatus === "failed"
+        ? '<span class="collection-pill collection-failed">Collection failed</span>'
+        : "");
     const features = (ml.top_matched_features || [])
       .slice(0, 8)
       .map((feature) => `<span>${escapeHtml(feature.token)} · ${feature.count}</span>`)
@@ -46,7 +52,10 @@ function renderResults(data) {
       <article class="result-card">
         <div class="result-heading">
           <h3>${escapeHtml(page.title || page.url)}</h3>
-          <span class="risk-pill ${riskClass}">${score}</span>
+          <div class="result-badges">
+            ${collectionBadge}
+            <span class="risk-pill ${riskClass}">${score}</span>
+          </div>
         </div>
         <a href="${escapeHtml(page.url)}" target="_blank" rel="noreferrer">${escapeHtml(page.url)}</a>
         <dl>
