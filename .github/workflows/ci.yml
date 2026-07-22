@@ -115,7 +115,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          docker build --pull --progress=plain -t dom-xss-pipeline:${{ github.sha }} . 2>&1 | tail -n 140
+          docker build --pull --progress=plain -t dom-xss-pipeline:${{ github.sha }} . 2>&1 | tail -n 45
 
       - name: Model artifact smoke test
         run: |
