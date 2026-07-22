@@ -9,6 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH \
     HOME=/home/app
 
 WORKDIR /app
@@ -26,11 +28,12 @@ COPY pyproject.toml README.md LICENSE ./
 COPY app ./app
 COPY scripts ./scripts
 
-RUN python -m pip install --upgrade pip \
+RUN python -m venv "${VIRTUAL_ENV}" \
+    && python -m pip install --upgrade pip \
     && python -m pip install . \
     && mkdir -p /app/artifacts \
     && python scripts/fetch_artifacts.py \
-    && chown -R app:app /app /home/app
+    && chown -R app:app /app /home/app "${VIRTUAL_ENV}"
 
 USER app
 
