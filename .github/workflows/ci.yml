@@ -114,6 +114,15 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
 
+      - name: Redis Compose smoke test
+        run: |
+          docker compose up -d --wait redis
+          test "$(docker compose exec -T redis redis-cli ping)" = "PONG"
+
+      - name: Stop Compose smoke services
+        if: always()
+        run: docker compose down --volumes
+
       - name: Build image
         shell: bash
         run: |

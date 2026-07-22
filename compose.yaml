@@ -73,6 +73,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
