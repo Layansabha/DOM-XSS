@@ -23,7 +23,7 @@ class Prediction:
     threshold: float
     matched_tokens: int
     total_tokens: int
-    top_matched_features: list[dict[str, int]]
+    top_matched_features: list[dict[str, str | int]]
 
 
 class ModelService:
@@ -52,7 +52,7 @@ class ModelService:
         features = np.asarray([vector], dtype=np.float32)
         probability = float(self.model.predict_proba(features)[0][1])
 
-        matched = [
+        matched: list[dict[str, str | int]] = [
             {"token": token, "count": count}
             for token, count in extracted.counts.most_common()
             if token in self.vocabulary
