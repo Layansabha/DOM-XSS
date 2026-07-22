@@ -106,7 +106,8 @@ class RequestPolicy:
     async def validate(self, raw_url: str) -> str:
         normalized = normalize_url(raw_url)
         parsed = urlsplit(normalized)
-        assert parsed.hostname is not None
+        if parsed.hostname is None:
+            raise UnsafeTargetError("URL has no hostname")
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
         # Resolve on every request. Caching an allow decision makes DNS rebinding easier.
