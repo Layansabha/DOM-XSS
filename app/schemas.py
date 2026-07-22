@@ -21,7 +21,7 @@ class ScanRequest(BaseModel):
     authorized: bool = False
 
     @model_validator(mode="after")
-    def require_authorization(self) -> "ScanRequest":
+    def require_authorization(self) -> ScanRequest:
         if self.dynamic_verification and not self.authorized:
             raise ValueError(
                 "authorized must be true when dynamic_verification is enabled"
