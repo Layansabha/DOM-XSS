@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import joblib
 import numpy as np
@@ -16,6 +16,11 @@ class ModelArtifactError(RuntimeError):
     pass
 
 
+class MatchedFeature(TypedDict):
+    token: str
+    count: int
+
+
 @dataclass(frozen=True)
 class Prediction:
     probability: float
@@ -23,7 +28,7 @@ class Prediction:
     threshold: float
     matched_tokens: int
     total_tokens: int
-    top_matched_features: list[dict[str, str | int]]
+    top_matched_features: list[MatchedFeature]
 
 
 class ModelService:
@@ -52,11 +57,13 @@ class ModelService:
         features = np.asarray([vector], dtype=np.float32)
         probability = float(self.model.predict_proba(features)[0][1])
 
-        matched: list[dict[str, str | int]] = [
-            {"token": token, "count": count}
-            for token, count in extracted.counts.most_common()
-            if token in self.vocabulary
-        ][:20]
+        matched: list[MatchedFeature] = []
+        for token, count in extracted.counts.most_common():
+            if token not in self.vocabulary:
+                continue
+            matched.append({"token": token, "count": int(count)})
+            if len(matched) == 20:
+                break
 
         return Prediction(
             probability=probability,
