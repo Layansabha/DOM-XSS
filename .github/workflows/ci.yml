@@ -31,7 +31,6 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-24.04
-    needs: lint
     steps:
       - name: Checkout PR head
         env:
@@ -54,7 +53,6 @@ jobs:
 
   quality:
     runs-on: ubuntu-24.04
-    needs: typecheck
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +69,6 @@ jobs:
 
   audit:
     runs-on: ubuntu-24.04
-    needs: quality
     steps:
       - name: Checkout PR head
         env:
@@ -94,7 +91,7 @@ jobs:
 
   container:
     runs-on: ubuntu-24.04
-    needs: audit
+    needs: [lint, typecheck, quality, audit]
     steps:
       - name: Checkout PR head
         env:
