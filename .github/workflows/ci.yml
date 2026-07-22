@@ -13,7 +13,15 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout PR head
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          git init --quiet .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git fetch --quiet --depth=1 origin "${REVISION}"
+          git checkout --quiet FETCH_HEAD
 
       - name: Ruff
         uses: astral-sh/ruff-action@v3
