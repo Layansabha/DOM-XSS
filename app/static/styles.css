@@ -279,6 +279,30 @@ button:disabled {
   font-size: 0.8rem;
 }
 
+.result-badges {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.collection-pill {
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.collection-partial {
+  background: rgba(255, 204, 102, 0.14);
+  color: var(--warning);
+}
+
+.collection-failed {
+  background: rgba(255, 107, 122, 0.14);
+  color: var(--danger);
+}
+
 .risk-high {
   background: rgba(255, 107, 122, 0.14);
   color: var(--danger);
@@ -351,6 +375,10 @@ footer {
   .section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .result-badges {
+    flex-wrap: wrap;
   }
 }
 
