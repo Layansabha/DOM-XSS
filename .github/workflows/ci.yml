@@ -29,9 +29,31 @@ jobs:
           version: "0.15.22"
           args: check --output-format=concise .
 
-  quality:
+  typecheck:
     runs-on: ubuntu-24.04
     needs: lint
+    steps:
+      - name: Checkout PR head
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          git init --quiet .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git fetch --quiet --depth=1 origin "${REVISION}"
+          git checkout --quiet FETCH_HEAD
+
+      - name: Install
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --quiet --disable-pip-version-check -e '.[dev]'
+
+      - name: Mypy
+        run: .venv/bin/mypy app
+
+  quality:
+    runs-on: ubuntu-24.04
+    needs: typecheck
     steps:
       - uses: actions/checkout@v4
 
@@ -42,9 +64,6 @@ jobs:
 
       - name: Install
         run: python -m pip install -e '.[dev]'
-
-      - name: Type check
-        run: mypy app
 
       - name: Unit tests
         run: pytest
