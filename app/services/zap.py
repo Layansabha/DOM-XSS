@@ -46,9 +46,12 @@ class ZapClient:
         component: str,
         message_type: str,
         name: str,
-        **params: object,
+        **params: str | int | float | bool | None,
     ) -> dict[str, object]:
-        query = {"apikey": self.settings.zap_api_key, **params}
+        query: dict[str, str | int | float | bool | None] = {
+            "apikey": self.settings.zap_api_key,
+            **params,
+        }
         response = await self.client.get(
             f"/JSON/{component}/{message_type}/{name}/",
             params=query,
