@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DOM XSS Pipeline</title>
+  <meta name="description" content="ML-assisted DOM XSS triage with optional authorized ZAP verification">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">DOM XSS ANALYSIS PIPELINE</p>
+      <h1>Prioritize suspicious client-side code, then verify it safely.</h1>
+      <p class="intro">
+        Browser-rendered DOM collection, JavaScript feature analysis, Random Forest
+        inference, and optional OWASP ZAP DOM-XSS verification.
+      </p>
+    </header>
+
+    <section class="panel">
+      <form id="scan-form">
+        <label for="target-url">Target URL</label>
+        <input
+          id="target-url"
+          name="target_url"
+          type="url"
+          placeholder="https://example.com/"
+          autocomplete="url"
+          maxlength="2048"
+          required
+        >
+
+        <div class="grid">
+          <div>
+            <label for="scope-mode">Scope</label>
+            <select id="scope-mode" name="scope_mode">
+              <option value="auto">Auto</option>
+              <option value="domain">Domain crawl</option>
+              <option value="page">Single page</option>
+            </select>
+          </div>
+          <div class="threshold">
+            <span>ML threshold</span>
+            <strong>{{ ml_threshold }}</strong>
+          </div>
+        </div>
+
+        <label class="check-row">
+          <input id="dynamic-verification" type="checkbox">
+          <span>Run authorized dynamic verification with OWASP ZAP</span>
+        </label>
+
+        <label class="check-row authorization hidden" id="authorization-row">
+          <input id="authorized" type="checkbox">
+          <span>I own this target or have explicit permission to actively test it.</span>
+        </label>
+
+        <p class="warning hidden" id="active-warning">
+          Dynamic verification sends active payloads. Do not use it on systems without permission.
+        </p>
+
+        <button type="submit" id="submit-button">Start analysis</button>
+      </form>
+    </section>
+
+    <section class="status-card hidden" id="status-card" aria-live="polite">
+      <div class="status-line">
+        <strong id="status-label">Queued</strong>
+        <span id="progress-label">0%</span>
+      </div>
+      <div class="progress"><div id="progress-bar"></div></div>
+      <p id="stage-label"></p>
+    </section>
+
+    <section class="results hidden" id="results"></section>
+
+    <footer>
+      Authorized testing only. ML output is a triage signal, not proof of exploitability.
+    </footer>
+  </main>
+</body>
+</html>
