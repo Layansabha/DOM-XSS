@@ -112,7 +112,7 @@ jobs:
             python -c "from app.services.ml import get_model_service; service=get_model_service(); assert len(service.vocabulary) == 500; print(type(service.model).__name__)"
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: dom-xss-pipeline:${{ github.sha }}
           format: sarif
@@ -122,7 +122,7 @@ jobs:
           exit-code: "1"
 
       - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
