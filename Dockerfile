@@ -1,4 +1,24 @@
-FROM mcr.microsoft.com/playwright/python:v1.61.0-noble
+FROM python:3.12-slim-bookworm AS artifact-builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+
+COPY scripts/prepare_artifacts.py ./prepare_artifacts.py
+
+# The source pickle requires its original scikit-learn ABI. Keep that legacy
+# dependency isolated here and copy only LightGBM's native, non-pickle output.
+RUN python -m pip install --upgrade "pip==26.1.2" \
+    && python -m pip install \
+        "joblib==1.5.2" \
+        "lightgbm==4.6.0" \
+        "numpy==1.26.4" \
+        "scikit-learn==1.3.2" \
+    && ARTIFACT_DIR=/artifacts python prepare_artifacts.py
+
+
+FROM mcr.microsoft.com/playwright/python:v1.61.0-noble AS runtime
 
 ARG APP_UID=10001
 ARG APP_GID=10001
@@ -27,13 +47,11 @@ RUN groupadd --gid "${APP_GID}" app \
 
 COPY pyproject.toml README.md LICENSE ./
 COPY app ./app
-COPY scripts ./scripts
+COPY --from=artifact-builder /artifacts ./artifacts
 
 RUN python -m venv "${VIRTUAL_ENV}" \
-    && python -m pip install --upgrade pip \
+    && python -m pip install --upgrade "pip==26.1.2" \
     && python -m pip install . \
-    && mkdir -p /app/artifacts \
-    && python scripts/fetch_artifacts.py \
     && chown -R app:app /app /home/app "${VIRTUAL_ENV}"
 
 USER app

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://redis:6379/0"
     queue_name: str = "domxss"
+    max_queued_scans: int = Field(default=25, ge=1, le=1000)
     result_ttl_seconds: int = Field(default=86400, ge=300, le=604800)
     scan_job_timeout_seconds: int = Field(default=1800, ge=60, le=7200)
 
@@ -35,9 +36,11 @@ class Settings(BaseSettings):
     include_third_party_scripts: bool = False
     user_agent: str = "DOM-XSS-Pipeline/1.0"
 
-    ml_model_path: Path = Path("/app/artifacts/random_forest_best_model_final.pkl")
-    ml_vocab_path: Path = Path("/app/artifacts/vocab_top500_filtered.pkl")
+    ml_model_path: Path = Path("/app/artifacts/lightgbm_model.txt")
+    ml_vocab_path: Path = Path("/app/artifacts/vocab_top500_filtered.json")
     ml_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
+    ml_max_code_units: int = Field(default=500, ge=1, le=5000)
+    ml_max_code_unit_bytes: int = Field(default=250_000, ge=1_000, le=2_000_000)
 
     zap_base_url: str = "http://zap:8080"
     zap_api_key: str = ""

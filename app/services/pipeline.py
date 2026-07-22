@@ -49,10 +49,16 @@ async def run_pipeline(
             }
         else:
             prediction = model.predict(artifact.rendered_dom, artifact.javascript)
-            page_result["ml"] = {
-                "status": "scored",
-                **asdict(prediction),
-            }
+            if prediction is None:
+                page_result["ml"] = {
+                    "status": "not_scored",
+                    "reason": "no executable JavaScript units were found",
+                }
+            else:
+                page_result["ml"] = {
+                    "status": "scored",
+                    **asdict(prediction),
+                }
         pages.append(page_result)
 
     zap_result: dict[str, object] | None = None
@@ -101,8 +107,8 @@ async def run_pipeline(
         "pages": pages,
         "zap": zap_result,
         "model": {
-            "algorithm": "Random Forest",
-            "feature_contract": "runtime-js-dom-tokenizer-v1",
+            "algorithm": "LightGBM",
+            "feature_contract": "function-ast-bag-of-words-v1",
             "threshold": settings.ml_threshold,
         },
         "duration_seconds": round(time.time() - started_at, 2),

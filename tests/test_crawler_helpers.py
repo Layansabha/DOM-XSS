@@ -4,10 +4,7 @@ from app.services.crawler import canonicalize_link, is_safe_crawl_link
 
 
 def test_canonicalize_link_removes_fragment() -> None:
-    assert (
-        canonicalize_link("https://example.com/a/", "../b#section")
-        == "https://example.com/b"
-    )
+    assert canonicalize_link("https://example.com/a/", "../b#section") == "https://example.com/b"
 
 
 def test_canonicalize_link_rejects_non_http_and_credentials() -> None:

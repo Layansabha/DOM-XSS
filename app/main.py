@@ -115,6 +115,12 @@ async def create_scan(scan_request: ScanRequest, request: Request) -> ScanCreate
 
     try:
         queue = get_queue()
+        if queue.count >= settings.max_queued_scans:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="scan queue is at capacity; try again later",
+                headers={"Retry-After": "30"},
+            )
         job = queue.enqueue(
             execute_scan,
             payload,

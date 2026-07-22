@@ -1,7 +1,5 @@
 const form = document.querySelector("#scan-form");
 const dynamicVerification = document.querySelector("#dynamic-verification");
-const authorizationRow = document.querySelector("#authorization-row");
-const authorized = document.querySelector("#authorized");
 const activeWarning = document.querySelector("#active-warning");
 const submitButton = document.querySelector("#submit-button");
 const statusCard = document.querySelector("#status-card");
@@ -12,10 +10,7 @@ const stageLabel = document.querySelector("#stage-label");
 const results = document.querySelector("#results");
 
 dynamicVerification.addEventListener("change", () => {
-  const enabled = dynamicVerification.checked;
-  authorizationRow.classList.toggle("hidden", !enabled);
-  activeWarning.classList.toggle("hidden", !enabled);
-  if (!enabled) authorized.checked = false;
+  activeWarning.classList.toggle("hidden", !dynamicVerification.checked);
 });
 
 function escapeHtml(value) {
@@ -58,6 +53,7 @@ function renderResults(data) {
           <div><dt>Scripts</dt><dd>${page.scripts_found}</dd></div>
           <div><dt>Links</dt><dd>${page.links_found}</dd></div>
           <div><dt>Matched tokens</dt><dd>${ml.matched_tokens ?? 0}</dd></div>
+          <div><dt>Code units</dt><dd>${ml.code_units_analyzed ?? 0}</dd></div>
         </dl>
         ${features ? `<div class="features">${features}</div>` : ""}
         ${(page.warnings || []).map((warning) => `<p class="note">${escapeHtml(warning)}</p>`).join("")}
@@ -132,11 +128,6 @@ form.addEventListener("submit", async (event) => {
   results.classList.add("hidden");
   results.innerHTML = "";
 
-  if (dynamicVerification.checked && !authorized.checked) {
-    window.alert("Confirm that you are authorized to actively test this target.");
-    return;
-  }
-
   submitButton.disabled = true;
   submitButton.textContent = "Submitting…";
   statusCard.classList.remove("hidden");
@@ -154,7 +145,6 @@ form.addEventListener("submit", async (event) => {
         target_url: document.querySelector("#target-url").value,
         scope_mode: document.querySelector("#scope-mode").value,
         dynamic_verification: dynamicVerification.checked,
-        authorized: authorized.checked,
       }),
     });
     const payload = await response.json();

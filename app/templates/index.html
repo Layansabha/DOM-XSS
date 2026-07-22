@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DOM XSS Pipeline</title>
-  <meta name="description" content="ML-assisted DOM XSS triage with optional authorized ZAP verification">
+  <meta name="description" content="LightGBM-assisted DOM XSS analysis with optional OWASP ZAP verification">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
 </head>
@@ -14,7 +14,7 @@
       <p class="eyebrow">DOM XSS ANALYSIS PIPELINE</p>
       <h1>Prioritize suspicious client-side code, then verify it safely.</h1>
       <p class="intro">
-        Browser-rendered DOM collection, JavaScript feature analysis, Random Forest
+        Browser-rendered DOM collection, function-level JavaScript AST analysis, LightGBM
         inference, and optional OWASP ZAP DOM-XSS verification.
       </p>
     </header>
@@ -49,12 +49,7 @@
 
         <label class="check-row">
           <input id="dynamic-verification" type="checkbox">
-          <span>Run authorized dynamic verification with OWASP ZAP</span>
-        </label>
-
-        <label class="check-row authorization hidden" id="authorization-row">
-          <input id="authorized" type="checkbox">
-          <span>I own this target or have explicit permission to actively test it.</span>
+          <span>Verify findings with the open-source OWASP ZAP CLI engine</span>
         </label>
 
         <p class="warning hidden" id="active-warning">
@@ -77,7 +72,7 @@
     <section class="results hidden" id="results"></section>
 
     <footer>
-      Authorized testing only. ML output is a triage signal, not proof of exploitability.
+      Use only on systems you are permitted to test. ML output is a triage signal.
     </footer>
   </main>
 </body>

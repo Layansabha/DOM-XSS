@@ -11,8 +11,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
-artifacts/*.pkl
-artifacts/*.joblib
+artifacts/
 scan-results/
 .DS_Store
 .idea/

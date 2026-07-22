@@ -36,6 +36,7 @@ class ZapClient:
         self.client = httpx.AsyncClient(
             base_url=settings.zap_base_url.rstrip("/"),
             timeout=settings.request_timeout_seconds,
+            trust_env=False,
         )
 
     async def close(self) -> None:
@@ -83,22 +84,23 @@ class ZapClient:
             await asyncio.sleep(2)
         raise ZapScanError(f"{component} timed out")
 
-    async def _create_context(self, target_url: str, context_name: str) -> None:
-        await self._request(
+    async def _create_context(self, target_url: str, context_name: str) -> str:
+        created = await self._request(
             "context",
             "action",
             "newContext",
             contextName=context_name,
         )
+        context_id = str(created.get("contextId", ""))
+        if not context_id:
+            raise ZapScanError(f"ZAP did not return a context id: {created}")
 
         parsed = urlsplit(target_url)
         host = re.escape(parsed.hostname or "")
         port = parsed.port
         default_port = 443 if parsed.scheme == "https" else 80
         port_expression = f":{port}" if port else rf"(?::{default_port})?"
-        include_regex = (
-            rf"^{re.escape(parsed.scheme)}://{host}{port_expression}/.*$"
-        )
+        include_regex = rf"^{re.escape(parsed.scheme)}://{host}{port_expression}/.*$"
         await self._request(
             "context",
             "action",
@@ -106,6 +108,14 @@ class ZapClient:
             contextName=context_name,
             regex=include_regex,
         )
+        await self._request(
+            "context",
+            "action",
+            "setContextInScope",
+            contextName=context_name,
+            booleanInScope="true",
+        )
+        return context_id
 
     async def _configure_policy(self, policy_name: str) -> None:
         try:
@@ -164,6 +174,14 @@ class ZapClient:
             except (httpx.HTTPError, ZapScanError) as exc:
                 logger.debug("ZAP cleanup failed for %s: %s", action, exc)
 
+    async def _stop_scan(self, component: str, scan_id: str) -> None:
+        if not scan_id:
+            return
+        try:
+            await self._request(component, "action", "stop", scanId=scan_id)
+        except (httpx.HTTPError, ZapScanError) as exc:
+            logger.debug("ZAP could not stop %s scan %s: %s", component, scan_id, exc)
+
     async def verify(
         self,
         target_url: str,
@@ -177,22 +195,27 @@ class ZapClient:
         context_name = f"domxss-{suffix}"
         policy_name = f"domxss-only-{suffix}"
         deadline = time.monotonic() + self.settings.zap_max_minutes * 60
+        scan_id = ""
 
         try:
-            await self._create_context(target_url, context_name)
+            context_id = await self._create_context(target_url, context_name)
             await self._configure_policy(policy_name)
 
-            seed_urls = [target_url, *(discovered_urls or [])]
+            seed_urls = (
+                [target_url] if scope_mode == "page" else [target_url, *(discovered_urls or [])]
+            )
             seen_seed_urls: set[str] = set()
             for seed_url in seed_urls:
+                if len(seen_seed_urls) >= self.settings.max_pages:
+                    break
                 if seed_url in seen_seed_urls:
                     continue
-                seen_seed_urls.add(seed_url)
                 try:
                     if not same_origin(target_url, seed_url):
                         continue
                 except ValueError:
                     continue
+                seen_seed_urls.add(seed_url)
                 access = await self._request(
                     "core",
                     "action",
@@ -202,38 +225,23 @@ class ZapClient:
                 )
                 if "accessUrl" not in access:
                     raise ZapScanError(f"ZAP could not access {seed_url}")
-
-            if scope_mode == "domain":
-                spider = await self._request(
-                    "spider",
+                scan = await self._request(
+                    "ascan",
                     "action",
                     "scan",
-                    url=target_url,
-                    maxChildren=str(self.settings.max_pages),
-                    recurse="true",
-                    contextName=context_name,
-                    subtreeOnly="true",
+                    url=seed_url,
+                    recurse="false",
+                    inScopeOnly="true",
+                    scanPolicyName=policy_name,
+                    method="",
+                    postData="",
+                    contextId=context_id,
                 )
-                spider_id = str(spider.get("scan", ""))
-                if spider_id:
-                    await self._wait_for_percentage("spider", spider_id, deadline)
-
-            scan = await self._request(
-                "ascan",
-                "action",
-                "scan",
-                url=target_url,
-                recurse="true" if scope_mode == "domain" else "false",
-                inScopeOnly="true",
-                scanPolicyName=policy_name,
-                method="",
-                postData="",
-                contextId="",
-            )
-            scan_id = str(scan.get("scan", ""))
-            if not scan_id:
-                raise ZapScanError(f"ZAP did not start the active scan: {scan}")
-            await self._wait_for_percentage("ascan", scan_id, deadline)
+                scan_id = str(scan.get("scan", ""))
+                if not scan_id:
+                    raise ZapScanError(f"ZAP did not start the active scan: {scan}")
+                await self._wait_for_percentage("ascan", scan_id, deadline)
+                scan_id = ""
 
             alert_payload = await self._request(
                 "core",
@@ -284,4 +292,5 @@ class ZapClient:
                 policy_name=policy_name,
             )
         finally:
+            await self._stop_scan("ascan", scan_id)
             await self._cleanup(context_name, policy_name)

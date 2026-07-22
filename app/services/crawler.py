@@ -135,12 +135,17 @@ class BrowserCrawler:
             source_url = str(node.get("src", ""))
 
             if inline_text:
-                encoded_size = len(inline_text.encode("utf-8", errors="ignore"))
-                if current_bytes + encoded_size <= self.settings.max_script_bytes:
-                    chunks.append(inline_text)
-                    current_bytes += encoded_size
-                else:
+                remaining = self.settings.max_script_bytes - current_bytes
+                if remaining <= 0:
                     warnings.append("inline JavaScript truncated by MAX_SCRIPT_BYTES")
+                    break
+                encoded = inline_text.encode("utf-8", errors="ignore")
+                bounded = encoded[:remaining]
+                chunks.append(bounded.decode("utf-8", errors="ignore"))
+                current_bytes += len(bounded)
+                if len(encoded) > remaining:
+                    warnings.append("inline JavaScript truncated by MAX_SCRIPT_BYTES")
+                    break
                 continue
 
             if not source_url or source_url in fetched_sources:
@@ -166,8 +171,20 @@ class BrowserCrawler:
                         f"script fetch returned HTTP {response.status}: {validated_source}"
                     )
                     continue
-                body = await response.body()
+                final_source = await self.policy.validate(response.url)
+                if not self.settings.include_third_party_scripts and not same_origin(
+                    target_origin_url, final_source
+                ):
+                    warnings.append("script redirect left the target origin and was skipped")
+                    continue
                 remaining = self.settings.max_script_bytes - current_bytes
+                content_length = response.headers.get("content-length")
+                if content_length and int(content_length) > remaining:
+                    warnings.append(
+                        "external JavaScript skipped because it exceeded MAX_SCRIPT_BYTES"
+                    )
+                    continue
+                body = await response.body()
                 if remaining <= 0:
                     warnings.append("external JavaScript truncated by MAX_SCRIPT_BYTES")
                     break
@@ -184,6 +201,7 @@ class BrowserCrawler:
         context: BrowserContext,
         page: Page,
         url: str,
+        target_origin_url: str,
     ) -> tuple[PageArtifact, list[str]]:
         warnings: list[str] = []
         response = await page.goto(
@@ -203,12 +221,12 @@ class BrowserCrawler:
             warnings.append("network did not become idle before collection")
 
         final_url = await self.policy.validate(page.url)
+        if not same_origin(target_origin_url, final_url):
+            raise UnsafeTargetError("page redirect left the target origin")
         rendered_dom = await page.content()
         raw_dom = rendered_dom.encode("utf-8", errors="ignore")
         if len(raw_dom) > self.settings.max_page_bytes:
-            rendered_dom = raw_dom[: self.settings.max_page_bytes].decode(
-                "utf-8", errors="replace"
-            )
+            rendered_dom = raw_dom[: self.settings.max_page_bytes].decode("utf-8", errors="replace")
             warnings.append("rendered DOM truncated by MAX_PAGE_BYTES")
 
         javascript, scripts_found, script_warnings = await self._extract_scripts(
@@ -218,9 +236,7 @@ class BrowserCrawler:
         )
         warnings.extend(script_warnings)
 
-        hrefs = await page.locator("a[href]").evaluate_all(
-            "nodes => nodes.map(node => node.href)"
-        )
+        hrefs = await page.locator("a[href]").evaluate_all("nodes => nodes.map(node => node.href)")
         links = [
             canonical
             for href in hrefs
@@ -280,6 +296,7 @@ class BrowserCrawler:
                             context,
                             page,
                             current_url,
+                            validated_target,
                         )
                         results.append(artifact)
                     except Exception as exc:

@@ -1,30 +1,63 @@
 from __future__ import annotations
 
-from app.services.extractor import token_counts, vectorize
+from collections import Counter
+
+from app.services.extractor import (
+    ast_token_counts,
+    extract_code_units,
+    vectorize_counts,
+)
 
 
-def test_token_counts_include_dom_attributes_and_javascript_identifiers() -> None:
-    dom = '<div id="output" onclick="run()">Hello</div>'
-    javascript = "document.getElementById('output').innerHTML = location.hash"
-    counts = token_counts(dom, javascript)
+def test_ast_tokens_include_symbols_operations_and_properties() -> None:
+    source = """
+    function render(value) {
+      const output = document.getElementById('output');
+      output.innerHTML = location.hash + value;
+    }
+    """
+    counts = ast_token_counts(source)
 
-    assert counts["div"] >= 1
-    assert counts["onclick"] >= 1
+    assert counts["function"] >= 1
+    assert counts["assign"] >= 2
+    assert counts["call"] >= 1
+    assert counts["add"] >= 1
     assert counts["document"] >= 1
     assert counts["innerhtml"] >= 1
     assert counts["location"] >= 1
 
 
-def test_vectorize_uses_vocabulary_indices() -> None:
+def test_extract_code_units_finds_functions_and_dom_handlers() -> None:
+    units = extract_code_units(
+        '<button onclick="preview(location.hash)">Preview</button>',
+        "function preview(value) { document.write(value); }",
+        max_units=10,
+        max_unit_bytes=10_000,
+    )
+
+    assert any(unit.kind == "function" and "document.write" in unit.source for unit in units)
+    assert any(unit.kind == "inline-handler" for unit in units)
+
+
+def test_extract_code_units_enforces_unit_limit_and_deduplicates() -> None:
+    units = extract_code_units(
+        '<button onclick="run()"></button><button onclick="run()"></button>',
+        "function one() {} function two() {}",
+        max_units=2,
+        max_unit_bytes=10_000,
+    )
+
+    assert len(units) == 2
+    assert len({(unit.kind, unit.source) for unit in units}) == 2
+
+
+def test_vectorize_counts_uses_vocabulary_indices() -> None:
     vocabulary = {"document": 0, "innerhtml": 1, "location": 2}
-    vector, metadata = vectorize(
-        "<div></div>",
-        "document.body.innerHTML = location.hash",
+    vector, metadata = vectorize_counts(
+        Counter({"document": 1, "innerhtml": 2, "location": 3, "ignored": 9}),
         vocabulary,
     )
 
-    assert len(vector) == 3
-    assert vector[0] >= 1
-    assert vector[1] >= 1
-    assert vector[2] >= 1
-    assert metadata.matched_tokens >= 3
+    assert vector == [1.0, 2.0, 3.0]
+    assert metadata.matched_tokens == 6
+    assert metadata.total_tokens == 15

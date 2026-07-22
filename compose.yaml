@@ -1,6 +1,7 @@
 name: dom-xss-pipeline
 
 x-app-common: &app-common
+  image: ${APP_IMAGE:-dom-xss-pipeline:local}
   build:
     context: .
   env_file:
@@ -15,8 +16,6 @@ x-app-common: &app-common
     - /tmp:size=512m,mode=1777
   depends_on:
     redis:
-      condition: service_healthy
-    zap:
       condition: service_healthy
   networks:
     - backend
@@ -45,14 +44,15 @@ services:
 
   worker:
     <<: *app-common
+    depends_on:
+      redis:
+        condition: service_healthy
+      zap:
+        condition: service_healthy
     command:
-      - rq
-      - worker
-      - domxss
-      - --url
-      - redis://redis:6379/0
-      - --logging-level
-      - INFO
+      - /bin/sh
+      - -c
+      - exec rq worker "$${QUEUE_NAME}" --url "$${REDIS_URL}" --logging-level INFO
     shm_size: 1gb
     read_only: true
 

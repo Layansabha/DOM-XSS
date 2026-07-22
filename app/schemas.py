@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ScopeMode(StrEnum):
@@ -18,15 +18,6 @@ class ScanRequest(BaseModel):
     target_url: str = Field(min_length=4, max_length=2048)
     scope_mode: ScopeMode = ScopeMode.auto
     dynamic_verification: bool = False
-    authorized: bool = False
-
-    @model_validator(mode="after")
-    def require_authorization(self) -> ScanRequest:
-        if self.dynamic_verification and not self.authorized:
-            raise ValueError(
-                "authorized must be true when dynamic_verification is enabled"
-            )
-        return self
 
 
 class ScanCreated(BaseModel):
