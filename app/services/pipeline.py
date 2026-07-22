@@ -4,6 +4,8 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict
 
+import httpx
+
 from app.config import Settings
 from app.schemas import ScanRequest
 from app.services.crawler import BrowserCrawler
@@ -58,13 +60,13 @@ async def run_pipeline(
         progress(70, "dynamic-verification")
         zap = ZapClient(settings)
         try:
-            result = await zap.verify(
+            zap_scan = await zap.verify(
                 normalized_target,
                 scope_mode,
                 discovered_urls=[artifact.url for artifact in page_artifacts],
             )
-            zap_result = {"status": "completed", **asdict(result)}
-        except (ZapScanError, OSError, TimeoutError) as exc:
+            zap_result = {"status": "completed", **asdict(zap_scan)}
+        except (ZapScanError, httpx.HTTPError, OSError, TimeoutError) as exc:
             zap_result = {
                 "status": "failed",
                 "error": f"{type(exc).__name__}: {exc}",
@@ -74,26 +76,26 @@ async def run_pipeline(
             await zap.close()
 
     progress(95, "finalizing")
-    scored_pages = [
-        page
-        for page in pages
-        if isinstance(page.get("ml"), dict)
-        and page["ml"].get("status") == "scored"
-    ]
-    high_risk_pages = [
-        page for page in scored_pages if bool(page["ml"].get("vulnerable"))
-    ]
+    scored_pages: list[dict[str, object]] = []
+    high_risk_page_count = 0
+    for page in pages:
+        ml_result = page.get("ml")
+        if not isinstance(ml_result, dict) or ml_result.get("status") != "scored":
+            continue
+        scored_pages.append(page)
+        if bool(ml_result.get("vulnerable")):
+            high_risk_page_count += 1
     verified_alerts = (zap_result or {}).get("alerts", [])
     alert_count = len(verified_alerts) if isinstance(verified_alerts, list) else 0
 
-    result = {
+    result: dict[str, object] = {
         "target_url": normalized_target,
         "scope_mode": scope_mode,
         "dynamic_verification": request.dynamic_verification,
         "summary": {
             "pages_collected": len(page_artifacts),
             "pages_scored": len(scored_pages),
-            "ml_high_risk_pages": len(high_risk_pages),
+            "ml_high_risk_pages": high_risk_page_count,
             "verified_dom_xss_alerts": alert_count,
         },
         "pages": pages,
