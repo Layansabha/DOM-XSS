@@ -9,7 +9,10 @@ COPY scripts/prepare_artifacts.py ./prepare_artifacts.py
 
 # The source pickle requires its original scikit-learn ABI. Keep that legacy
 # dependency isolated here and copy only LightGBM's native, non-pickle output.
-RUN python -m pip install --upgrade "pip==26.1.2" \
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --upgrade "pip==26.1.2" \
     && python -m pip install \
         "joblib==1.5.2" \
         "lightgbm==4.6.0" \
@@ -37,7 +40,7 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get upgrade --yes --no-install-recommends \
-    && apt-get install --yes --no-install-recommends python3.12-venv \
+    && apt-get install --yes --no-install-recommends libgomp1 python3.12-venv \
     && apt-get autoremove --yes \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
