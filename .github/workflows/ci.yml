@@ -134,6 +134,11 @@ jobs:
           docker run --rm dom-xss-pipeline:${{ github.sha }} \
             python -c "import importlib.util; from app.services.ml import get_model_service; service=get_model_service(); result=service.predict('', 'function sink(){document.write(location.hash)}'); assert len(service.vocabulary)==500; assert type(service.model).__name__=='Booster'; assert result is not None; assert importlib.util.find_spec('sklearn') is None; assert importlib.util.find_spec('joblib') is None; print(type(service.model).__name__, result.probability)"
 
+      - name: RQ worker command smoke test
+        run: |
+          docker run --rm dom-xss-pipeline:${{ github.sha }} \
+            rq worker --help | grep --quiet --fixed-strings -- '--logging_level'
+
       - name: Trivy image scan
         id: trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
