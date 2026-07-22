@@ -25,11 +25,29 @@ class ZapResult:
     alerts: list[dict[str, object]]
     scanned_url: str
     policy_name: str
+    confirmed_alert_count: int
+    client_spider_ran: bool
+    warnings: list[str]
     scanner_id: str = "40026"
 
 
 class ZapClient:
     DOM_XSS_SCANNER_ID = "40026"
+    CLIENT_DOM_SCANNER_IDS = {
+        "210000",
+        "210001",
+        "210016",
+        "210017",
+        "210018",
+        "220000",
+        "220003",
+        "220004",
+        "220005",
+        "220008",
+        "220009",
+        "40101",
+        "40102",
+    }
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -83,6 +101,14 @@ class ZapClient:
                 return
             await asyncio.sleep(2)
         raise ZapScanError(f"{component} timed out")
+
+    async def _wait_for_passive_scan(self, deadline: float) -> None:
+        while time.monotonic() < deadline:
+            payload = await self._request("pscan", "view", "recordsToScan")
+            if int(str(payload.get("recordsToScan", "0"))) <= 0:
+                return
+            await asyncio.sleep(1)
+        raise ZapScanError("ZAP passive scan timed out")
 
     async def _create_context(self, target_url: str, context_name: str) -> str:
         created = await self._request(
@@ -196,10 +222,50 @@ class ZapClient:
         policy_name = f"domxss-only-{suffix}"
         deadline = time.monotonic() + self.settings.zap_max_minutes * 60
         scan_id = ""
+        client_scan_id = ""
+        client_spider_ran = False
+        warnings: list[str] = []
 
         try:
             context_id = await self._create_context(target_url, context_name)
             await self._configure_policy(policy_name)
+
+            try:
+                client_scan = await self._request(
+                    "clientSpider",
+                    "action",
+                    "scan",
+                    browser="firefox-headless",
+                    url=target_url,
+                    contextName=context_name,
+                    subtreeOnly="true" if scope_mode == "page" else "false",
+                    maxCrawlDepth=0 if scope_mode == "page" else self.settings.max_crawl_depth,
+                    pageLoadTime=min(self.settings.request_timeout_seconds, 20),
+                    actionWaitTime=1,
+                    numberOfBrowsers=1,
+                )
+                client_scan_id = str(client_scan.get("scan", ""))
+                if not client_scan_id:
+                    raise ZapScanError(f"ZAP did not start the Client Spider: {client_scan}")
+                client_deadline = min(
+                    deadline,
+                    time.monotonic() + max(30, self.settings.zap_max_minutes * 24),
+                )
+                await self._wait_for_percentage(
+                    "clientSpider",
+                    client_scan_id,
+                    client_deadline,
+                )
+                client_spider_ran = True
+                client_scan_id = ""
+                await self._wait_for_passive_scan(client_deadline)
+            except (httpx.HTTPError, ZapScanError, ValueError) as exc:
+                warnings.append(
+                    "Client Spider was unavailable or incomplete; "
+                    f"active DOM XSS verification continued ({type(exc).__name__})"
+                )
+                await self._stop_scan("clientSpider", client_scan_id)
+                client_scan_id = ""
 
             seed_urls = (
                 [target_url] if scope_mode == "page" else [target_url, *(discovered_urls or [])]
@@ -243,6 +309,11 @@ class ZapClient:
                 await self._wait_for_percentage("ascan", scan_id, deadline)
                 scan_id = ""
 
+            try:
+                await self._wait_for_passive_scan(deadline)
+            except (httpx.HTTPError, ZapScanError, ValueError) as exc:
+                warnings.append(f"passive scan queue did not finish ({type(exc).__name__})")
+
             alert_payload = await self._request(
                 "core",
                 "view",
@@ -257,12 +328,16 @@ class ZapClient:
                 raw_alerts = []
 
             alerts: list[dict[str, object]] = []
+            seen_alerts: set[tuple[str, str, str, str, str]] = set()
             for raw_alert in raw_alerts:
                 if not isinstance(raw_alert, dict):
                     continue
                 plugin_id = str(raw_alert.get("pluginId", ""))
                 alert_url = str(raw_alert.get("url", ""))
-                if plugin_id != self.DOM_XSS_SCANNER_ID:
+                if (
+                    plugin_id != self.DOM_XSS_SCANNER_ID
+                    and plugin_id not in self.CLIENT_DOM_SCANNER_IDS
+                ):
                     continue
                 if alert_url:
                     try:
@@ -270,19 +345,29 @@ class ZapClient:
                             continue
                     except ValueError:
                         continue
+                name = str(raw_alert.get("name", "DOM XSS"))
+                param = str(raw_alert.get("param", ""))
+                evidence = str(raw_alert.get("evidence", ""))
+                fingerprint = (plugin_id, alert_url, name, param, evidence)
+                if fingerprint in seen_alerts:
+                    continue
+                seen_alerts.add(fingerprint)
+                confirmed = plugin_id == self.DOM_XSS_SCANNER_ID
                 alerts.append(
                     {
-                        "name": raw_alert.get("name", "DOM XSS"),
+                        "name": name,
                         "risk": raw_alert.get("risk", ""),
                         "confidence": raw_alert.get("confidence", ""),
                         "url": alert_url,
-                        "param": raw_alert.get("param", ""),
+                        "param": param,
                         "attack": raw_alert.get("attack", ""),
-                        "evidence": raw_alert.get("evidence", ""),
+                        "evidence": evidence,
                         "description": raw_alert.get("description", ""),
                         "solution": raw_alert.get("solution", ""),
                         "reference": raw_alert.get("reference", ""),
                         "plugin_id": plugin_id,
+                        "finding_type": "active_confirmation" if confirmed else "client_rule",
+                        "confirmed": confirmed,
                     }
                 )
 
@@ -290,7 +375,11 @@ class ZapClient:
                 alerts=alerts,
                 scanned_url=target_url,
                 policy_name=policy_name,
+                confirmed_alert_count=sum(bool(alert["confirmed"]) for alert in alerts),
+                client_spider_ran=client_spider_ran,
+                warnings=warnings,
             )
         finally:
+            await self._stop_scan("clientSpider", client_scan_id)
             await self._stop_scan("ascan", scan_id)
             await self._cleanup(context_name, policy_name)

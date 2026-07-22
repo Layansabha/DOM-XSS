@@ -5,6 +5,8 @@ from app.services.crawler import (
     canonicalize_link,
     collection_status_from_warnings,
     is_safe_crawl_link,
+    merge_script_nodes,
+    script_nodes_from_html,
     summarize_warnings,
 )
 
@@ -54,3 +56,35 @@ def test_network_idle_timeout_marks_public_result_partial() -> None:
     assert collection_status_from_warnings([warning]) == "partial"
     assert collection_status_from_warnings(["page collection failed: TimeoutError"]) == "failed"
     assert artifact.public_metadata()["collection_status"] == "partial"
+
+
+def test_original_html_scripts_survive_runtime_dom_replacement() -> None:
+    nodes = script_nodes_from_html(
+        """
+        <script>document.write(location.hash)</script>
+        <script type="application/json">{"not": "javascript"}</script>
+        <script src="/assets/app.js"></script>
+        """,
+        "https://example.com/path/page",
+    )
+
+    assert nodes == [
+        {"src": "", "text": "document.write(location.hash)"},
+        {"src": "https://example.com/assets/app.js", "text": ""},
+    ]
+
+
+def test_script_node_merge_deduplicates_original_live_and_resource_entries() -> None:
+    merged = merge_script_nodes(
+        [{"src": "https://example.com/app.js", "text": ""}],
+        [
+            {"src": "https://example.com/app.js", "text": ""},
+            {"src": "", "text": "run()"},
+        ],
+        [{"src": "", "text": "run()"}],
+    )
+
+    assert merged == [
+        {"src": "https://example.com/app.js", "text": ""},
+        {"src": "", "text": "run()"},
+    ]

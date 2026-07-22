@@ -15,7 +15,7 @@
       <h1>Prioritize suspicious client-side code, then verify it safely.</h1>
       <p class="intro">
         Browser-rendered DOM collection, function-level JavaScript AST analysis, LightGBM
-        inference, and optional OWASP ZAP DOM-XSS verification.
+        inference, and optional OWASP ZAP client-side and active DOM-XSS analysis.
       </p>
     </header>
 
@@ -49,7 +49,7 @@
 
         <label class="check-row">
           <input id="dynamic-verification" type="checkbox">
-          <span>Verify findings with the open-source OWASP ZAP CLI engine</span>
+          <span>Run open-source OWASP ZAP dynamic analysis</span>
         </label>
 
         <p class="warning hidden" id="active-warning">
@@ -72,7 +72,7 @@
     <section class="results hidden" id="results"></section>
 
     <footer>
-      Use only on systems you are permitted to test. ML output is a triage signal.
+      Use only on systems you are permitted to test. ML scores rank findings; they do not prove exploitability.
     </footer>
   </main>
 </body>

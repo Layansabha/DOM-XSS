@@ -51,6 +51,18 @@ def test_extract_code_units_enforces_unit_limit_and_deduplicates() -> None:
     assert len({(unit.kind, unit.source) for unit in units}) == 2
 
 
+def test_extract_code_units_ignores_comments_and_empty_statements() -> None:
+    units = extract_code_units(
+        "",
+        "// model baseline must not score this\n;\ndocument.write(location.hash);",
+        max_units=10,
+        max_unit_bytes=10_000,
+    )
+
+    assert len(units) == 1
+    assert "document.write" in units[0].source
+
+
 def test_vectorize_counts_uses_vocabulary_indices() -> None:
     vocabulary = {"document": 0, "innerhtml": 1, "location": 2}
     vector, metadata = vectorize_counts(

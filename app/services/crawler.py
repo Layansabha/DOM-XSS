@@ -6,6 +6,8 @@ from collections import Counter, deque
 from dataclasses import asdict, dataclass
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
+from bs4 import BeautifulSoup
+from bs4.element import Tag
 from playwright.async_api import BrowserContext, Page, Route, async_playwright
 
 from app.config import Settings
@@ -45,6 +47,13 @@ _SKIP_EXTENSIONS = {
 }
 
 _NETWORK_IDLE_WARNING = "network did not become idle before collection"
+_EXECUTABLE_SCRIPT_TYPES = {
+    "application/ecmascript",
+    "application/javascript",
+    "module",
+    "text/ecmascript",
+    "text/javascript",
+}
 
 
 def summarize_warnings(warnings: list[str]) -> list[str]:
@@ -104,6 +113,46 @@ def canonicalize_link(base_url: str, href: str) -> str | None:
     return urlunsplit(normalized)
 
 
+def script_nodes_from_html(html: str, base_url: str) -> list[dict[str, str]]:
+    """Read scripts from the original response before runtime DOM mutations remove them."""
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+    base_tag = soup.find("base", href=True)
+    effective_base_url = (
+        urljoin(base_url, str(base_tag.get("href"))) if isinstance(base_tag, Tag) else base_url
+    )
+    nodes: list[dict[str, str]] = []
+    for script in soup.find_all("script"):
+        script_type = str(script.get("type", "")).split(";", 1)[0].strip().lower()
+        if script_type and script_type not in _EXECUTABLE_SCRIPT_TYPES:
+            continue
+        raw_source = script.get("src")
+        if raw_source:
+            nodes.append({"src": urljoin(effective_base_url, str(raw_source)), "text": ""})
+        else:
+            nodes.append({"src": "", "text": str(script.string or script.get_text())})
+    return nodes
+
+
+def merge_script_nodes(*node_groups: list[dict[str, str]]) -> list[dict[str, str]]:
+    merged: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for group in node_groups:
+        for node in group:
+            normalized = {
+                "src": str(node.get("src", "")),
+                "text": str(node.get("text", "")),
+            }
+            fingerprint = (normalized["src"], normalized["text"])
+            if not any(fingerprint) or fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            merged.append(normalized)
+    return merged
+
+
 class BrowserCrawler:
     def __init__(self, settings: Settings, policy: RequestPolicy) -> None:
         self.settings = settings
@@ -126,23 +175,39 @@ class BrowserCrawler:
         context: BrowserContext,
         page: Page,
         target_origin_url: str,
+        original_html: str,
     ) -> tuple[str, int, list[str]]:
-        script_nodes = await page.locator("script").evaluate_all(
-            """nodes => nodes.map(node => ({
-                src: node.src || "",
-                text: node.src ? "" : (node.textContent || "")
-            }))"""
+        live_script_nodes = await page.locator("script").evaluate_all(
+            """nodes => nodes
+                .filter(node => {
+                    const type = (node.type || "").split(";", 1)[0].trim().toLowerCase();
+                    return !type || type === "module" || type.includes("javascript") ||
+                        type.includes("ecmascript");
+                })
+                .map(node => ({
+                    src: node.src || "",
+                    text: node.src ? "" : (node.textContent || "")
+                }))"""
         )
         loaded_script_urls = await page.evaluate(
             """() => performance.getEntriesByType('resource')
                 .filter(entry => entry.initiatorType === 'script')
                 .map(entry => entry.name)"""
         )
-        known_sources = {str(node.get("src", "")) for node in script_nodes}
-        script_nodes.extend(
+        original_script_nodes = script_nodes_from_html(original_html, target_origin_url)
+        known_sources = {
+            str(node.get("src", ""))
+            for node in [*original_script_nodes, *live_script_nodes]
+        }
+        resource_nodes = [
             {"src": str(source_url), "text": ""}
             for source_url in loaded_script_urls
             if str(source_url) and str(source_url) not in known_sources
+        ]
+        script_nodes = merge_script_nodes(
+            original_script_nodes,
+            live_script_nodes,
+            resource_nodes,
         )
 
         chunks: list[str] = []
@@ -233,6 +298,19 @@ class BrowserCrawler:
         if response is not None and response.status >= 400:
             warnings.append(f"page returned HTTP {response.status}")
 
+        original_html = ""
+        if response is not None:
+            try:
+                original_html = await response.text()
+                original_bytes = original_html.encode("utf-8", errors="ignore")
+                if len(original_bytes) > self.settings.max_page_bytes:
+                    original_html = original_bytes[: self.settings.max_page_bytes].decode(
+                        "utf-8", errors="replace"
+                    )
+                    warnings.append("original HTML truncated by MAX_PAGE_BYTES")
+            except Exception as exc:
+                warnings.append(f"original HTML could not be read: {type(exc).__name__}")
+
         try:
             await page.wait_for_load_state(
                 "networkidle",
@@ -254,6 +332,7 @@ class BrowserCrawler:
             context,
             page,
             final_url,
+            original_html,
         )
         warnings.extend(script_warnings)
 

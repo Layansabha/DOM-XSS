@@ -31,12 +31,21 @@ function renderResults(data) {
   const summary = data.summary;
   const pages = data.pages || [];
   const zapAlerts = data.zap?.alerts || [];
+  const zapWarnings = data.zap?.warnings || [];
   const zapError = data.zap?.status === "failed" ? data.zap.error : "";
 
   const pageCards = pages.map((page) => {
     const ml = page.ml || {};
-    const riskClass = ml.vulnerable ? "risk-high" : "risk-low";
-    const score = ml.status === "scored" ? percentage(ml.probability) : "Not scored";
+    const scored = ml.status === "scored";
+    const riskClass = scored ? (ml.vulnerable ? "risk-high" : "risk-low") : "risk-unknown";
+    const score = scored
+      ? `ML score ${percentage(ml.probability)}`
+      : (ml.status === "insufficient_feature_coverage"
+        ? "Insufficient coverage"
+        : "Not scored");
+    const decision = scored
+      ? (ml.vulnerable ? "High priority" : "Low priority")
+      : "No ML decision";
     const collectionStatus = page.collection_status || "complete";
     const collectionBadge = collectionStatus === "partial"
       ? '<span class="collection-pill collection-partial">Partial scan</span>'
@@ -54,6 +63,7 @@ function renderResults(data) {
           <h3>${escapeHtml(page.title || page.url)}</h3>
           <div class="result-badges">
             ${collectionBadge}
+            <span class="decision-pill ${riskClass}">${decision}</span>
             <span class="risk-pill ${riskClass}">${score}</span>
           </div>
         </div>
@@ -61,20 +71,26 @@ function renderResults(data) {
         <dl>
           <div><dt>Scripts</dt><dd>${page.scripts_found}</dd></div>
           <div><dt>Links</dt><dd>${page.links_found}</dd></div>
-          <div><dt>Matched tokens</dt><dd>${ml.matched_tokens ?? 0}</dd></div>
-          <div><dt>Code units</dt><dd>${ml.code_units_analyzed ?? 0}</dd></div>
+          <div><dt>Feature coverage</dt><dd>${percentage(ml.feature_coverage ?? 0)}</dd></div>
+          <div><dt>Scored units</dt><dd>${ml.code_units_scored ?? 0}/${ml.code_units_analyzed ?? 0}</dd></div>
         </dl>
         ${features ? `<div class="features">${features}</div>` : ""}
+        ${ml.reason ? `<p class="note">${escapeHtml(ml.reason)}</p>` : ""}
         ${(page.warnings || []).map((warning) => `<p class="note">${escapeHtml(warning)}</p>`).join("")}
       </article>
     `;
   }).join("");
 
   const alertCards = zapAlerts.map((alert) => `
-    <article class="result-card verified">
+    <article class="result-card ${alert.confirmed ? "verified" : "detected"}">
       <div class="result-heading">
         <h3>${escapeHtml(alert.name)}</h3>
-        <span class="risk-pill risk-high">${escapeHtml(alert.risk)}</span>
+        <div class="result-badges">
+          <span class="decision-pill ${alert.confirmed ? "risk-high" : "risk-detected"}">
+            ${alert.confirmed ? "Actively confirmed" : "Client-side detection"}
+          </span>
+          <span class="risk-pill risk-high">${escapeHtml(alert.risk)}</span>
+        </div>
       </div>
       <a href="${escapeHtml(alert.url)}" target="_blank" rel="noreferrer">${escapeHtml(alert.url)}</a>
       <p><strong>Parameter:</strong> ${escapeHtml(alert.param || "n/a")}</p>
@@ -92,7 +108,7 @@ function renderResults(data) {
       <div><strong>${summary.pages_collected}</strong><span>Pages collected</span></div>
       <div><strong>${summary.pages_scored}</strong><span>Pages scored</span></div>
       <div><strong>${summary.ml_high_risk_pages}</strong><span>ML high-risk pages</span></div>
-      <div><strong>${summary.verified_dom_xss_alerts}</strong><span>Verified alerts</span></div>
+      <div><strong>${summary.zap_dom_xss_findings ?? 0}</strong><span>ZAP findings · ${summary.verified_dom_xss_alerts ?? 0} confirmed</span></div>
     </div>
     <div class="section-heading">
       <h2>Page analysis</h2>
@@ -100,10 +116,11 @@ function renderResults(data) {
     </div>
     ${pageCards || '<p class="empty">No pages were collected.</p>'}
     ${data.dynamic_verification ? `
-      <div class="section-heading"><h2>ZAP verification</h2></div>
+      <div class="section-heading"><h2>ZAP dynamic analysis</h2></div>
+      ${zapWarnings.map((warning) => `<p class="note">${escapeHtml(warning)}</p>`).join("")}
       ${zapError
         ? `<p class="note error-note">ZAP verification failed: ${escapeHtml(zapError)}</p>`
-        : (alertCards || '<p class="empty">No DOM XSS alert was verified by ZAP.</p>')}
+        : (alertCards || '<p class="empty">ZAP did not report a DOM XSS finding.</p>')}
     ` : ""}
     <p class="disclaimer">${escapeHtml(data.disclaimer)}</p>
   `;

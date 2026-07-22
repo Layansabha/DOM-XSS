@@ -132,7 +132,7 @@ jobs:
       - name: Model artifact smoke test
         run: |
           docker run --rm dom-xss-pipeline:${{ github.sha }} \
-            python -c "import importlib.util; from app.services.ml import get_model_service; service=get_model_service(); result=service.predict('', 'function sink(){document.write(location.hash)}'); assert len(service.vocabulary)==500; assert type(service.model).__name__=='Booster'; assert result is not None; assert importlib.util.find_spec('sklearn') is None; assert importlib.util.find_spec('joblib') is None; print(type(service.model).__name__, result.probability)"
+            python -c "import importlib.util; from app.services.ml import get_model_service; service=get_model_service(); result=service.predict('', 'function sink(){document.write(location.hash)}'); zero=service.predict('', 'quuxxyz;'); assert len(service.vocabulary)==500; assert type(service.model).__name__=='Booster'; assert result is not None and result.status=='scored' and result.probability is not None and result.probability>0.9; assert zero is not None and zero.status=='insufficient_feature_coverage' and zero.probability is None; assert importlib.util.find_spec('sklearn') is None; assert importlib.util.find_spec('joblib') is None; print(type(service.model).__name__, result.probability, zero.status)"
 
       - name: RQ worker command smoke test
         run: |

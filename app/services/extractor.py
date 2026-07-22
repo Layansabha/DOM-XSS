@@ -17,6 +17,7 @@ _FUNCTION_NODES = {
     "generator_function_declaration",
     "method_definition",
 }
+_NON_EXECUTABLE_TOP_LEVEL_NODES = {"comment", "empty_statement"}
 _IDENTIFIER_NODES = {
     "identifier",
     "private_property_identifier",
@@ -215,6 +216,8 @@ def extract_code_units(
 
         function_ranges = [(node.start_byte, node.end_byte) for node in function_nodes]
         for child in tree.root_node.named_children:
+            if child.type in _NON_EXECUTABLE_TOP_LEVEL_NODES:
+                continue
             if any(
                 start <= child.start_byte and child.end_byte <= end
                 for start, end in function_ranges

@@ -5,7 +5,7 @@ A deployable DOM-based XSS analysis pipeline that combines:
 - same-origin crawling for domain-level targets
 - browser-rendered DOM and JavaScript collection with Playwright
 - function-level AST inference with the LightGBM model from `Layansabha/Dom-xss-ML`
-- optional dynamic verification with the open-source OWASP ZAP DOM XSS active scan rule
+- optional dynamic analysis with OWASP ZAP Client Spider, client-side rules, and active rule 40026
 - Redis/RQ background jobs
 - Docker Compose deployment
 - CI, linting, tests, container scanning, and dependency updates
@@ -17,13 +17,14 @@ A deployable DOM-based XSS analysis pipeline that combines:
 1. The user submits a URL.
 2. `auto` mode treats a root URL as a domain scan and a non-root URL as a single-page scan.
 3. Playwright renders each in-scope page.
-4. The pipeline collects inline JavaScript, same-origin external JavaScript, and DOM event handlers.
+4. The pipeline collects JavaScript from both the original HTML response and the rendered DOM, plus same-origin external scripts and DOM event handlers. Reading the original response preserves scripts removed by `document.write()` or other runtime DOM mutations.
 5. JavaScript is split into function-sized units and converted into AST token-frequency vectors using the original 500-token vocabulary.
-6. LightGBM scores every code unit; the highest function risk is reported for its page.
-7. When dynamic verification is enabled, ZAP runs the browser-based DOM XSS active rule (`40026`) once for each collected in-scope page, bounded by `MAX_PAGES`.
-8. The UI displays per-page ML findings and any ZAP evidence.
+6. LightGBM scores only units with at least one vocabulary match. Zero-feature units are reported as insufficient coverage instead of receiving the model's intercept score.
+7. The highest scored function is reported for its page, together with feature coverage and scored-unit counts.
+8. When dynamic analysis is enabled, ZAP Client Spider exercises client-side flows and the browser-based active rule (`40026`) runs once for each collected in-scope page, bounded by `MAX_PAGES`.
+9. The UI separates client-side detections from actively confirmed findings.
 
-The ML result is a prioritization signal, not proof of exploitability. ZAP findings are reported separately.
+The ML score is a ranking signal, not a calibrated probability that a page is exploitable. ZAP client-side detections still require review; only active rule `40026` findings are labeled actively confirmed.
 
 ## Kali Linux quick start
 
@@ -37,12 +38,14 @@ Install Docker on Kali if needed:
 
 ```bash
 sudo apt update
-sudo apt install -y docker.io docker-compose-plugin
+sudo apt install -y docker.io docker-compose
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 newgrp docker
 docker compose version
 ```
+
+Kali packages Compose v2 as `docker-compose`; `docker-compose-plugin` is not available on every Kali mirror. The installed command is still `docker compose`.
 
 ```bash
 git clone https://github.com/Layansabha/DOM-XSS.git
@@ -124,6 +127,14 @@ curl -sS -X POST http://127.0.0.1:8000/api/scans \
 
 Set `dynamic_verification=true` to run OWASP ZAP after ML analysis.
 
+### Reading the result
+
+- **ML score** ranks code using the original LightGBM model; it is not a confidence percentage or proof of a vulnerability.
+- **Feature coverage** is the share of extracted AST tokens represented in the model's 500-token vocabulary.
+- **Insufficient coverage** means no collected code unit matched that vocabulary, so the page is intentionally not scored.
+- **Client-side detection** is evidence from a ZAP client rule and needs review/reproduction.
+- **Actively confirmed** means ZAP active rule `40026` produced reproducible scanner evidence.
+
 ## Configuration
 
 Copy `.env.example` to `.env`. Important controls:
@@ -139,7 +150,7 @@ Copy `.env.example` to `.env`. Important controls:
 - `ML_THRESHOLD=0.50` controls the vulnerable-risk classification threshold.
 - `ML_MAX_CODE_UNITS=500` caps function-level inference work per page.
 - `ML_MAX_CODE_UNIT_BYTES=250000` caps the source size of one analyzed unit.
-- `ZAP_MAX_MINUTES=10` limits dynamic verification.
+- `ZAP_MAX_MINUTES=10` limits the combined Client Spider, passive queue, and active verification work.
 - `ZAP_ATTACK_STRENGTH=LOW` limits payload volume.
 - `ZAP_ALERT_THRESHOLD=MEDIUM` reduces noisy alerts.
 
@@ -178,9 +189,9 @@ Reported model metrics from the source repository:
 | Precision | 0.9970 |
 | Recall | 0.9165 |
 | Approximate F1 | 0.9551 |
-| False positives | 15 |
+| False positives | 11 |
 
-The source repository's reported metrics describe its held-out dataset. They do not guarantee the same performance on live websites.
+The source repository's reported metrics describe a stratified held-out split of function rows. They do not measure site-level generalization and do not guarantee the same performance on live websites.
 
 ## Development
 
@@ -233,7 +244,7 @@ OpenAPI documentation is available at `/docs`.
 - strict page, depth, byte, and time limits
 - no public ZAP port
 - ZAP API key
-- DOM-XSS-only active scan policy
+- DOM-XSS-only active scan policy plus bounded Client Spider coverage
 - non-root application user
 - Redis not published to the host
 - security headers and API request-size limits
@@ -244,7 +255,8 @@ OpenAPI documentation is available at `/docs`.
 
 ## Known limitations
 
-- The training dataset represents individual JavaScript functions as bags of parsed AST tokens. This runtime follows that function-level contract with Tree-sitter, but it cannot exactly reproduce the modified Chromium/V8 instrumentation that created the original dataset. Treat ML output as prioritization until the runtime extractor is revalidated against a labeled deployment set.
+- The training dataset represents individual JavaScript functions as bags of parsed AST tokens. This runtime follows that function-level contract with Tree-sitter, but it cannot exactly reproduce the modified Chromium/V8 instrumentation that created the original dataset. The UI exposes feature coverage and refuses to score zero-feature units, but the extractor still needs validation against a labeled deployment set.
+- A low ML score does not rule out DOM XSS. For example, feature importance does not imply that every occurrence of `innerHTML` increases the model output; dynamic ZAP analysis remains important.
 - Automated scanners can miss interaction-dependent or authentication-dependent DOM XSS.
 - Authenticated crawling is not implemented yet.
 - DNS re-resolution narrows but cannot completely eliminate DNS-rebinding time-of-check/time-of-use risk. Production deployments should also enforce outbound network policy and metadata-service blocking.
@@ -260,4 +272,6 @@ MIT. Model artifacts remain attributable to their source repository and are down
 - [DOM XSS Web Vulnerability Dataset](https://kilthub.cmu.edu/articles/dataset/DOM_XSS_Web_Vulnerability_Dataset/13870256)
 - [Function-level AST feature representation used by the source research](https://www.contrib.andrew.cmu.edu/~liminjia/research/papers/www2021-dom-xss-dnn.pdf)
 - [OWASP ZAP DOM XSS active scan rule 40026](https://www.zaproxy.org/docs/alerts/40026/)
+- [OWASP ZAP Client Spider](https://www.zaproxy.org/docs/desktop/addons/client-side-integration/spider/)
+- [OWASP ZAP vs Google Firing Range](https://www.zaproxy.org/docs/scans/firingrange/)
 - [OWASP ZAP Docker guide](https://www.zaproxy.org/docs/docker/about/)

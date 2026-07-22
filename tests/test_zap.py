@@ -34,6 +34,8 @@ async def test_zap_verifies_only_collected_same_origin_pages(
             return {"contextId": "7"}
         if (component, name) == ("core", "accessUrl"):
             return {"accessUrl": params["url"]}
+        if (component, name) == ("clientSpider", "scan"):
+            return {"scan": "client-1"}
         if (component, name) == ("ascan", "scan"):
             next_scan_id += 1
             return {"scan": str(next_scan_id)}
@@ -46,6 +48,11 @@ async def test_zap_verifies_only_collected_same_origin_pages(
                         "pluginId": "40026",
                         "url": "https://example.com/account",
                         "name": "DOM XSS",
+                    },
+                    {
+                        "pluginId": "220000",
+                        "url": "https://example.com/settings",
+                        "name": "DOM-based XSS",
                     },
                     {"pluginId": "40026", "url": "https://other.example/x"},
                     {"pluginId": "10000", "url": "https://example.com/"},
@@ -76,6 +83,17 @@ async def test_zap_verifies_only_collected_same_origin_pages(
     ]
     assert all(scan["recurse"] == "false" for scan in active_scans)
     assert all(scan["contextId"] == "7" for scan in active_scans)
-    assert not any(component == "spider" for component, _, _, _ in calls)
-    assert len(result.alerts) == 1
+    client_scans = [
+        params
+        for component, _, name, params in calls
+        if (component, name) == ("clientSpider", "scan")
+    ]
+    assert len(client_scans) == 1
+    assert client_scans[0]["contextName"].startswith("domxss-")
+    assert result.client_spider_ran
+    assert len(result.alerts) == 2
     assert result.alerts[0]["plugin_id"] == "40026"
+    assert result.alerts[0]["confirmed"] is True
+    assert result.alerts[1]["plugin_id"] == "220000"
+    assert result.alerts[1]["confirmed"] is False
+    assert result.confirmed_alert_count == 1

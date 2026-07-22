@@ -279,6 +279,14 @@ button:disabled {
   font-size: 0.8rem;
 }
 
+.decision-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .result-badges {
   display: flex;
   flex: 0 0 auto;
@@ -313,8 +321,22 @@ button:disabled {
   color: var(--accent);
 }
 
+.risk-unknown {
+  background: rgba(154, 166, 182, 0.14);
+  color: var(--muted);
+}
+
+.risk-detected {
+  background: rgba(255, 204, 102, 0.14);
+  color: var(--warning);
+}
+
 .verified {
   border-color: rgba(255, 107, 122, 0.45);
+}
+
+.detected {
+  border-color: rgba(255, 204, 102, 0.4);
 }
 
 .features {

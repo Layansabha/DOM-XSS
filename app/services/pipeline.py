@@ -55,10 +55,12 @@ async def run_pipeline(
                     "reason": "no executable JavaScript units were found",
                 }
             else:
-                page_result["ml"] = {
-                    "status": "scored",
-                    **asdict(prediction),
-                }
+                ml_payload: dict[str, object] = asdict(prediction)
+                if prediction.status == "insufficient_feature_coverage":
+                    ml_payload["reason"] = (
+                        "collected code did not match the model vocabulary"
+                    )
+                page_result["ml"] = ml_payload
         pages.append(page_result)
 
     zap_result: dict[str, object] | None = None
@@ -77,6 +79,8 @@ async def run_pipeline(
                 "status": "failed",
                 "error": f"{type(exc).__name__}: {exc}",
                 "alerts": [],
+                "confirmed_alert_count": 0,
+                "warnings": [],
             }
         finally:
             await zap.close()
@@ -91,8 +95,12 @@ async def run_pipeline(
         scored_pages.append(page)
         if bool(ml_result.get("vulnerable")):
             high_risk_page_count += 1
-    verified_alerts = (zap_result or {}).get("alerts", [])
-    alert_count = len(verified_alerts) if isinstance(verified_alerts, list) else 0
+    zap_alerts = (zap_result or {}).get("alerts", [])
+    alert_count = len(zap_alerts) if isinstance(zap_alerts, list) else 0
+    raw_confirmed_alert_count = (zap_result or {}).get("confirmed_alert_count", 0)
+    confirmed_alert_count = (
+        raw_confirmed_alert_count if isinstance(raw_confirmed_alert_count, int) else 0
+    )
 
     result: dict[str, object] = {
         "target_url": normalized_target,
@@ -102,7 +110,8 @@ async def run_pipeline(
             "pages_collected": len(page_artifacts),
             "pages_scored": len(scored_pages),
             "ml_high_risk_pages": high_risk_page_count,
-            "verified_dom_xss_alerts": alert_count,
+            "zap_dom_xss_findings": alert_count,
+            "verified_dom_xss_alerts": confirmed_alert_count,
         },
         "pages": pages,
         "zap": zap_result,
@@ -113,8 +122,9 @@ async def run_pipeline(
         },
         "duration_seconds": round(time.time() - started_at, 2),
         "disclaimer": (
-            "ML output is a triage signal. A vulnerability should be considered "
-            "confirmed only when reproducible evidence is available."
+            "The ML score is a ranking signal, not a calibrated probability of exploitation. "
+            "Only ZAP active-rule findings are labeled confirmed; client-side rule findings "
+            "still require reproducible evidence and human review."
         ),
     }
     progress(100, "finished")

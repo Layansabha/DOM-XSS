@@ -11,7 +11,13 @@ from lightgbm import Booster
 from lightgbm.basic import LightGBMError
 
 from app.config import get_settings
-from app.services.extractor import ast_token_counts, extract_code_units, vectorize_counts
+from app.services.extractor import (
+    CodeUnit,
+    ExtractedFeatures,
+    ast_token_counts,
+    extract_code_units,
+    vectorize_counts,
+)
 
 
 class ModelArtifactError(RuntimeError):
@@ -25,13 +31,18 @@ class MatchedFeature(TypedDict):
 
 @dataclass(frozen=True)
 class Prediction:
-    probability: float
-    vulnerable: bool
+    status: str
+    probability: float | None
+    vulnerable: bool | None
+    decision: str
     threshold: float
     code_units_analyzed: int
-    riskiest_unit_kind: str
+    code_units_scored: int
+    ignored_zero_feature_units: int
+    riskiest_unit_kind: str | None
     matched_tokens: int
     total_tokens: int
+    feature_coverage: float
     top_matched_features: list[MatchedFeature]
 
 
@@ -84,14 +95,42 @@ class ModelService:
             return None
 
         vectors: list[list[float]] = []
-        extracted_units = []
+        scorable_units: list[CodeUnit] = []
+        extracted_units: list[ExtractedFeatures] = []
+        page_matched_tokens = 0
+        page_total_tokens = 0
         for unit in units:
             vector, extracted = vectorize_counts(
                 ast_token_counts(unit.source),
                 self.vocabulary,
             )
+            page_matched_tokens += extracted.matched_tokens
+            page_total_tokens += extracted.total_tokens
+            if extracted.matched_tokens == 0:
+                continue
             vectors.append(vector)
+            scorable_units.append(unit)
             extracted_units.append(extracted)
+
+        feature_coverage = (
+            page_matched_tokens / page_total_tokens if page_total_tokens else 0.0
+        )
+        if not vectors:
+            return Prediction(
+                status="insufficient_feature_coverage",
+                probability=None,
+                vulnerable=None,
+                decision="insufficient_feature_coverage",
+                threshold=self.threshold,
+                code_units_analyzed=len(units),
+                code_units_scored=0,
+                ignored_zero_feature_units=len(units),
+                riskiest_unit_kind=None,
+                matched_tokens=0,
+                total_tokens=page_total_tokens,
+                feature_coverage=feature_coverage,
+                top_matched_features=[],
+            )
 
         features = np.asarray(vectors, dtype=np.float32)
         probabilities = np.asarray(self.model.predict(features), dtype=np.float64)
@@ -108,13 +147,18 @@ class ModelService:
                 break
 
         return Prediction(
+            status="scored",
             probability=probability,
             vulnerable=probability >= self.threshold,
+            decision="high_priority" if probability >= self.threshold else "low_priority",
             threshold=self.threshold,
             code_units_analyzed=len(units),
-            riskiest_unit_kind=units[riskiest_index].kind,
+            code_units_scored=len(scorable_units),
+            ignored_zero_feature_units=len(units) - len(scorable_units),
+            riskiest_unit_kind=scorable_units[riskiest_index].kind,
             matched_tokens=extracted.matched_tokens,
             total_tokens=extracted.total_tokens,
+            feature_coverage=feature_coverage,
             top_matched_features=matched,
         )
 
