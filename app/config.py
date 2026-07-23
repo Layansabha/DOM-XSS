@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     include_third_party_scripts: bool = False
     user_agent: str = "DOM-XSS-Pipeline/1.0"
 
-    ml_model_path: Path = Path("/app/artifacts/lightgbm_model.txt")
-    ml_vocab_path: Path = Path("/app/artifacts/vocab_top500_filtered.json")
+    ml_model_path: Path = Path("/app/artifacts/lightgbm_grouped_model.txt")
+    ml_vocab_path: Path = Path("/app/artifacts/vocab_top500_grouped.json")
     ml_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     ml_max_code_units: int = Field(default=500, ge=1, le=5000)
     ml_max_code_unit_bytes: int = Field(default=250_000, ge=1_000, le=2_000_000)

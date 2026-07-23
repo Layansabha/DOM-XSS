@@ -8,21 +8,23 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-import joblib
-from lightgbm import LGBMClassifier
-
-SOURCE_COMMIT = "a14721a928d492055d02dbb5416318d3de8062b4"
+SOURCE_COMMIT = "f3eff79a4b695ea9c36edf810917889c3b05e9a7"
 BASE_URL = f"https://raw.githubusercontent.com/Layansabha/Dom-xss-ML/{SOURCE_COMMIT}"
 SOURCE_ARTIFACTS = {
     "model": {
-        "path": "models/lightgbm_best_model_final.pkl",
-        "git_blob_sha": "f325da95bf788bbc20234e9f526f4a95c555aa27",
-        "size": 725_044,
+        "path": "models/lightgbm_grouped_model.txt",
+        "git_blob_sha": "a721cd648fcee6467c3864b94f98841f595f51ff",
+        "size": 1_016_695,
     },
     "vocabulary": {
-        "path": "preprocessing/vocab_top500_filtered.pkl",
-        "git_blob_sha": "6806138426c8db94b67edb15e401e67ee15e53de",
-        "size": 6_632,
+        "path": "preprocessing/vocab_top500_grouped.json",
+        "git_blob_sha": "d54e409b236c982762ed19b1a6ec72857812fc1e",
+        "size": 9_239,
+    },
+    "metadata": {
+        "path": "models/lightgbm_grouped_metadata.json",
+        "git_blob_sha": "6457f73d5cd2fab8c179d62b2d5634a9fcd4af33",
+        "size": 3_319,
     },
 }
 
@@ -86,11 +88,13 @@ def main() -> None:
         staging = Path(temporary)
         source_model = download_verified("model", staging)
         source_vocabulary = download_verified("vocabulary", staging)
+        source_metadata = download_verified("metadata", staging)
 
-        model = joblib.load(source_model)
-        vocabulary = joblib.load(source_vocabulary)
-        if not isinstance(model, LGBMClassifier):
-            raise RuntimeError("source model is not an LGBMClassifier")
+        model_text = source_model.read_text(encoding="utf-8")
+        vocabulary = json.loads(source_vocabulary.read_text(encoding="utf-8"))
+        metadata = json.loads(source_metadata.read_text(encoding="utf-8"))
+        if "max_feature_idx=499" not in model_text:
+            raise RuntimeError("source model does not declare 500 features")
         if not isinstance(vocabulary, dict) or len(vocabulary) != 500:
             raise RuntimeError("source vocabulary is not a 500-token mapping")
         if not all(
@@ -99,22 +103,30 @@ def main() -> None:
             raise RuntimeError("source vocabulary entries are invalid")
         if sorted(vocabulary.values()) != list(range(len(vocabulary))):
             raise RuntimeError("source vocabulary indexes are not contiguous and unique")
-        if int(model.n_features_in_) != len(vocabulary):
-            raise RuntimeError("model and vocabulary feature counts do not match")
+        if not isinstance(metadata, dict) or metadata.get("artifact_version") != 2:
+            raise RuntimeError("source metadata is invalid")
+        if metadata.get("output_semantics") != "risk_score_not_calibrated_probability":
+            raise RuntimeError("source score semantics are missing")
 
-        native_model = staging / "lightgbm_model.txt"
-        native_vocabulary = staging / "vocab_top500_filtered.json"
-        model.booster_.save_model(native_model)
+        native_model = staging / "lightgbm_grouped_model.txt"
+        native_vocabulary = staging / "vocab_top500_grouped.json"
+        native_metadata = staging / "lightgbm_grouped_metadata.json"
+        source_model.replace(native_model)
         write_json(native_vocabulary, vocabulary)
+        write_json(native_metadata, metadata)
 
         source_manifest = {
             "model": {
                 **SOURCE_ARTIFACTS["model"],
-                "sha256": sha256_file(source_model),
+                "sha256": sha256_file(native_model),
             },
             "vocabulary": {
                 **SOURCE_ARTIFACTS["vocabulary"],
                 "sha256": sha256_file(source_vocabulary),
+            },
+            "metadata": {
+                **SOURCE_ARTIFACTS["metadata"],
+                "sha256": sha256_file(source_metadata),
             },
         }
         manifest = {
@@ -123,12 +135,13 @@ def main() -> None:
             "runtime_artifacts": {
                 native_model.name: {"sha256": sha256_file(native_model)},
                 native_vocabulary.name: {"sha256": sha256_file(native_vocabulary)},
+                native_metadata.name: {"sha256": sha256_file(native_metadata)},
             },
         }
         manifest_path = staging / "artifact-manifest.json"
         write_json(manifest_path, manifest)
 
-        for artifact in (native_model, native_vocabulary, manifest_path):
+        for artifact in (native_model, native_vocabulary, native_metadata, manifest_path):
             artifact.replace(output_dir / artifact.name)
             print(f"installed {artifact.name}")
 

@@ -7,18 +7,9 @@ WORKDIR /build
 
 COPY scripts/prepare_artifacts.py ./prepare_artifacts.py
 
-# The source pickle requires its original scikit-learn ABI. Keep that legacy
-# dependency isolated here and copy only LightGBM's native, non-pickle output.
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends libgomp1 \
-    && rm -rf /var/lib/apt/lists/* \
-    && python -m pip install --upgrade "pip==26.1.2" \
-    && python -m pip install \
-        "joblib==1.5.2" \
-        "lightgbm==4.6.0" \
-        "numpy==1.26.4" \
-        "scikit-learn==1.3.2" \
-    && ARTIFACT_DIR=/artifacts python prepare_artifacts.py
+# Fetch only commit-pinned native artifacts. No pickle deserialization or
+# training-time scikit-learn ABI is needed in the image build.
+RUN ARTIFACT_DIR=/artifacts python prepare_artifacts.py
 
 
 FROM mcr.microsoft.com/playwright/python:v1.61.0-noble AS runtime

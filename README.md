@@ -4,7 +4,7 @@ A deployable DOM-based XSS analysis pipeline that combines:
 
 - same-origin crawling for domain-level targets
 - browser-rendered DOM and JavaScript collection with Playwright
-- function-level AST inference with the LightGBM model from `Layansabha/Dom-xss-ML`
+- function-level AST inference with the grouped LightGBM model from `Layansabha/Dom-xss-ML`
 - optional dynamic analysis with OWASP ZAP Client Spider, client-side rules, and active rule 40026
 - Redis/RQ background jobs
 - Docker Compose deployment
@@ -18,7 +18,7 @@ A deployable DOM-based XSS analysis pipeline that combines:
 2. `auto` mode treats a root URL as a domain scan and a non-root URL as a single-page scan.
 3. Playwright renders each in-scope page.
 4. The pipeline collects JavaScript from both the original HTML response and the rendered DOM, plus same-origin external scripts and DOM event handlers. Reading the original response preserves scripts removed by `document.write()` or other runtime DOM mutations.
-5. JavaScript is split into function-sized units and converted into AST token-frequency vectors using the original 500-token vocabulary.
+5. JavaScript is split into function-sized units and converted into AST token-frequency vectors using a 500-token vocabulary fitted on the training split only.
 6. LightGBM scores only units with at least one vocabulary match. Zero-feature units are reported as insufficient coverage instead of receiving the model's intercept score.
 7. The highest scored function is reported for its page, together with feature coverage and scored-unit counts.
 8. When dynamic analysis is enabled, ZAP Client Spider exercises client-side flows and the browser-based active rule (`40026`) runs once for each collected in-scope page, bounded by `MAX_PAGES`.
@@ -129,7 +129,7 @@ Set `dynamic_verification=true` to run OWASP ZAP after ML analysis.
 
 ### Reading the result
 
-- **ML score** ranks code using the original LightGBM model; it is not a confidence percentage or proof of a vulnerability.
+- **ML score** ranks code using the leakage-resistant grouped LightGBM model; it is not a confidence percentage or proof of a vulnerability.
 - **Feature coverage** is the share of extracted AST tokens represented in the model's 500-token vocabulary.
 - **Insufficient coverage** means no collected code unit matched that vocabulary, so the page is intentionally not scored.
 - **Client-side detection** is evidence from a ZAP client rule and needs review/reproduction.
@@ -167,31 +167,31 @@ Do not enable this on an internet-facing deployment.
 The image build downloads immutable model artifacts from commit:
 
 ```text
-a14721a928d492055d02dbb5416318d3de8062b4
+f3eff79a4b695ea9c36edf810917889c3b05e9a7
 ```
 
 Files:
 
-- `models/lightgbm_best_model_final.pkl`
-- `preprocessing/vocab_top500_filtered.pkl`
+- `models/lightgbm_grouped_model.txt`
+- `preprocessing/vocab_top500_grouped.json`
+- `models/lightgbm_grouped_metadata.json`
 
-During the isolated artifact-build stage, the conversion script verifies each file using its Git
-blob SHA, loads the pinned source pickle, and exports LightGBM's native model format plus a JSON
-vocabulary. The runtime image contains neither the source pickle nor its legacy scikit-learn
-dependency. SHA-256 digests for the source and runtime files are saved in
-`artifact-manifest.json` inside the image.
+The isolated artifact-build stage verifies file size and Git blob SHA before
+installing the native LightGBM model, JSON vocabulary, and model metadata.
+There is no pickle deserialization and no training-time scikit-learn dependency
+in the image. SHA-256 digests are saved in `artifact-manifest.json`.
 
-Reported model metrics from the source repository:
+Strict held-out function-level metrics from the source repository:
 
-| Metric | Value |
-|---|---:|
-| Accuracy | 0.9614 |
-| Precision | 0.9970 |
-| Recall | 0.9165 |
-| Approximate F1 | 0.9551 |
-| False positives | 11 |
+| Threshold | Precision | Recall | F1 | PR-AUC |
+|---|---:|---:|---:|---:|
+| Validation-selected `0.96085` | 0.9545 | 0.7636 | 0.8485 | 0.9066 |
+| `0.50` pre-filter | 0.8431 | 0.7818 | 0.8113 | 0.9066 |
 
-The source repository's reported metrics describe a stratified held-out split of function rows. They do not measure site-level generalization and do not guarantee the same performance on live websites.
+The split is grouped by JavaScript script and the strict test contains only
+unique feature bags unseen by train or validation. Corrupt Excel-truncated,
+zero-coverage, conflicting-label, and duplicate rows are excluded. These
+metrics still do not measure page-level production performance.
 
 ## Development
 
@@ -215,15 +215,11 @@ uvicorn app.main:app --reload
 rq worker domxss --url redis://127.0.0.1:6379/0
 ```
 
-The native model files must exist under `artifacts/`. To reproduce the isolated conversion
-locally, create a disposable environment with the source model's original ABI dependencies:
+The native model files must exist under `artifacts/`. To fetch and verify the
+commit-pinned artifacts locally:
 
 ```bash
-python3 -m venv .artifact-venv
-.artifact-venv/bin/pip install \
-  'joblib==1.5.2' 'lightgbm==4.6.0' 'numpy==1.26.4' 'scikit-learn==1.3.2'
-ARTIFACT_DIR=artifacts .artifact-venv/bin/python scripts/prepare_artifacts.py
-rm -rf .artifact-venv
+ARTIFACT_DIR=artifacts python3 scripts/prepare_artifacts.py
 ```
 
 ## API
@@ -256,6 +252,8 @@ OpenAPI documentation is available at `/docs`.
 ## Known limitations
 
 - The training dataset represents individual JavaScript functions as bags of parsed AST tokens. This runtime follows that function-level contract with Tree-sitter, but it cannot exactly reproduce the modified Chromium/V8 instrumentation that created the original dataset. The UI exposes feature coverage and refuses to score zero-feature units, but the extractor still needs validation against a labeled deployment set.
+- The available sampled workbooks contained 3,290 Excel-truncated feature dictionaries. The grouped model rejects them rather than silently converting them to zero vectors; a complete retraining from the raw CMU `.xz` release remains the preferred next dataset revision.
+- After strict deduplication, the held-out test contains 55 independent positive feature bags. Reported metrics therefore have materially wider uncertainty than the former row-random split implied.
 - A low ML score does not rule out DOM XSS. For example, feature importance does not imply that every occurrence of `innerHTML` increases the model output; dynamic ZAP analysis remains important.
 - Automated scanners can miss interaction-dependent or authentication-dependent DOM XSS.
 - Authenticated crawling is not implemented yet.
