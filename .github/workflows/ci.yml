@@ -113,6 +113,7 @@ jobs:
         run: |
           cp .env.example .env
           docker compose config --quiet
+          docker compose -f compose.yaml -f deploy/compose.prod.yaml config --quiet
 
       - name: Redis Compose smoke test
         run: |

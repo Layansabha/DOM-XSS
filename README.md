@@ -195,7 +195,7 @@ that setting on a public deployment.
 
 | Guide | Purpose |
 |---|---|
-| [Use the pipeline](docs/USAGE.md) | Exact Kali, UI, API, result, and troubleshooting steps. |
+| [Use the pipeline](docs/USAGE.md) | Exact Kali, UI, API, VPS, result, and troubleshooting steps. |
 | [How the pipeline works](docs/PIPELINE.md) | Technical flow from URL validation through ZAP evidence. |
 | [Model and research compatibility](docs/MODEL-AND-RESEARCH.md) | Evidence-backed comparison with the CMU study and model limitations. |
 | [Security policy](SECURITY.md) | Supported versions and responsible vulnerability reporting. |
@@ -212,6 +212,9 @@ pytest
 ruff check .
 mypy app
 ```
+
+The same checks are available as `make test`, `make lint`, `make typecheck`,
+and `make audit`.
 
 Model artifacts are fetched from a commit-pinned source during the image build
 and verified before installation. To prepare them for local development:

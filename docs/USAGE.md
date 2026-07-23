@@ -142,3 +142,40 @@ curl -i http://127.0.0.1:8000/readyz
 The first build is large because it downloads Chromium, OWASP ZAP, Python
 dependencies, Redis, and the pinned model artifacts. Later starts reuse the
 local images and are much faster.
+
+## VPS deployment
+
+The production override adds Caddy, automatic HTTPS, and HTTP basic
+authentication. Before deploying:
+
+1. Point the target domain's `A` or `AAAA` record to the VPS.
+2. Allow inbound TCP `80/443` and UDP `443`.
+3. Copy `.env.example` to `.env`.
+
+Generate the required credentials:
+
+```bash
+docker run --rm caddy:2.10-alpine \
+  caddy hash-password --plaintext 'choose-a-strong-password'
+openssl rand -hex 32
+```
+
+Set the resulting values in `.env`:
+
+```env
+APP_IMAGE=ghcr.io/layansabha/dom-xss:latest
+APP_DOMAIN=scan.example.com
+APP_BASIC_AUTH_USER=admin
+APP_BASIC_AUTH_HASH='$2a$14$replace_with_the_generated_hash'
+ZAP_API_KEY=replace-with-the-generated-random-value
+```
+
+Deploy the published image:
+
+```bash
+./deploy/deploy.sh
+```
+
+The script pulls the images, starts the base and production Compose files, and
+waits for the API readiness check. If the GHCR package is not public, first
+authenticate Docker with a GitHub token that has `read:packages`.
