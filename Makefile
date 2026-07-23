@@ -3,7 +3,8 @@ TF_LOCAL_DIR := infra/terraform/local
 
 .PHONY: up down logs build test lint typecheck audit \
 	tf-fmt tf-validate tf-test \
-	tf-local-plan tf-local-apply tf-local-output tf-local-destroy
+	tf-local-plan tf-local-apply tf-local-output tf-local-destroy \
+	release rollback
 
 up:
 	docker compose up --build
@@ -28,6 +29,13 @@ typecheck:
 
 audit:
 	pip-audit
+
+release:
+	@test -n "$(IMAGE)" || (echo "Usage: make release IMAGE=ghcr.io/layansabha/dom-xss:sha-..." >&2; exit 2)
+	./deploy/release.sh "$(IMAGE)"
+
+rollback:
+	./deploy/rollback.sh
 
 tf-fmt:
 	terraform fmt -recursive infra/terraform
