@@ -11,6 +11,10 @@ set -Eeuo pipefail
 
 cd "$REPOSITORY_ROOT"
 
+if [[ ! -f "$ENV_FILE" ]]; then
+  ENV_FILE="$REPOSITORY_ROOT/.env.example"
+fi
+
 compose_args=(
   --env-file "$ENV_FILE"
   -f compose.yaml
