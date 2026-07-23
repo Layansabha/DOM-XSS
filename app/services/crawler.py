@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from playwright.async_api import BrowserContext, Page, Route, async_playwright
+from playwright.async_api import BrowserContext, CDPSession, Page, Route, async_playwright
 
 from app.config import Settings
 from app.services.url_guard import RequestPolicy, UnsafeTargetError, same_origin
@@ -139,6 +139,7 @@ def script_nodes_from_html(html: str, base_url: str) -> list[dict[str, str]]:
 def merge_script_nodes(*node_groups: list[dict[str, str]]) -> list[dict[str, str]]:
     merged: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
+    source_indexes: dict[str, int] = {}
     for group in node_groups:
         for node in group:
             normalized = {
@@ -148,7 +149,18 @@ def merge_script_nodes(*node_groups: list[dict[str, str]]) -> list[dict[str, str
             fingerprint = (normalized["src"], normalized["text"])
             if not any(fingerprint) or fingerprint in seen:
                 continue
+            source = normalized["src"]
+            if source and source in source_indexes:
+                existing_index = source_indexes[source]
+                existing = merged[existing_index]
+                if not existing["text"] and normalized["text"]:
+                    seen.discard((existing["src"], existing["text"]))
+                    merged[existing_index] = normalized
+                    seen.add(fingerprint)
+                continue
             seen.add(fingerprint)
+            if source:
+                source_indexes[source] = len(merged)
             merged.append(normalized)
     return merged
 
@@ -176,6 +188,7 @@ class BrowserCrawler:
         page: Page,
         target_origin_url: str,
         original_html: str,
+        runtime_script_nodes: list[dict[str, str]],
     ) -> tuple[str, int, list[str]]:
         live_script_nodes = await page.locator("script").evaluate_all(
             """nodes => nodes
@@ -197,7 +210,11 @@ class BrowserCrawler:
         original_script_nodes = script_nodes_from_html(original_html, target_origin_url)
         known_sources = {
             str(node.get("src", ""))
-            for node in [*original_script_nodes, *live_script_nodes]
+            for node in [
+                *original_script_nodes,
+                *live_script_nodes,
+                *runtime_script_nodes,
+            ]
         }
         resource_nodes = [
             {"src": str(source_url), "text": ""}
@@ -207,6 +224,7 @@ class BrowserCrawler:
         script_nodes = merge_script_nodes(
             original_script_nodes,
             live_script_nodes,
+            runtime_script_nodes,
             resource_nodes,
         )
 
@@ -282,6 +300,58 @@ class BrowserCrawler:
 
         return "\n".join(chunks), scripts_found, warnings
 
+    async def _start_runtime_script_collection(
+        self,
+        context: BrowserContext,
+        page: Page,
+    ) -> tuple[CDPSession, list[dict[str, object]]]:
+        """Track JavaScript parsed by Chromium, including eval/new Function sources."""
+        session = await context.new_cdp_session(page)
+        parsed_scripts: list[dict[str, object]] = []
+        session.on("Debugger.scriptParsed", parsed_scripts.append)
+        await session.send("Debugger.enable")
+        # Enabling the debugger replays scripts from the document that is
+        # about to be replaced. Keep only scripts parsed for this navigation.
+        await asyncio.sleep(0)
+        parsed_scripts.clear()
+        return session, parsed_scripts
+
+    async def _finish_runtime_script_collection(
+        self,
+        session: CDPSession,
+        parsed_scripts: list[dict[str, object]],
+    ) -> tuple[list[dict[str, str]], list[str]]:
+        nodes: list[dict[str, str]] = []
+        warnings: list[str] = []
+        seen_ids: set[str] = set()
+        failures = 0
+
+        for event in parsed_scripts:
+            script_id = str(event.get("scriptId", ""))
+            if not script_id or script_id in seen_ids:
+                continue
+            seen_ids.add(script_id)
+            try:
+                result = await session.send(
+                    "Debugger.getScriptSource",
+                    {"scriptId": script_id},
+                )
+            except Exception:
+                failures += 1
+                continue
+
+            source = str(result.get("scriptSource", "")).strip()
+            if not source:
+                continue
+            nodes.append({"src": str(event.get("url", "")), "text": source})
+
+        if failures:
+            warnings.append(
+                f"Chromium runtime source could not be read ({failures} occurrences)"
+            )
+        await session.detach()
+        return nodes, warnings
+
     async def _collect_page(
         self,
         context: BrowserContext,
@@ -290,11 +360,19 @@ class BrowserCrawler:
         target_origin_url: str,
     ) -> tuple[PageArtifact, list[str]]:
         warnings: list[str] = []
-        response = await page.goto(
-            url,
-            wait_until="domcontentloaded",
-            timeout=self.settings.request_timeout_seconds * 1000,
+        cdp_session, parsed_scripts = await self._start_runtime_script_collection(
+            context,
+            page,
         )
+        try:
+            response = await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=self.settings.request_timeout_seconds * 1000,
+            )
+        except Exception:
+            await cdp_session.detach()
+            raise
         if response is not None and response.status >= 400:
             warnings.append(f"page returned HTTP {response.status}")
 
@@ -319,6 +397,11 @@ class BrowserCrawler:
         except Exception:
             warnings.append(_NETWORK_IDLE_WARNING)
 
+        runtime_script_nodes, runtime_warnings = (
+            await self._finish_runtime_script_collection(cdp_session, parsed_scripts)
+        )
+        warnings.extend(runtime_warnings)
+
         final_url = await self.policy.validate(page.url)
         if not same_origin(target_origin_url, final_url):
             raise UnsafeTargetError("page redirect left the target origin")
@@ -333,6 +416,7 @@ class BrowserCrawler:
             page,
             final_url,
             original_html,
+            runtime_script_nodes,
         )
         warnings.extend(script_warnings)
 

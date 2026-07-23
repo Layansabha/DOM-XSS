@@ -88,3 +88,14 @@ def test_script_node_merge_deduplicates_original_live_and_resource_entries() -> 
         {"src": "https://example.com/app.js", "text": ""},
         {"src": "", "text": "run()"},
     ]
+
+
+def test_script_node_merge_prefers_runtime_source_over_url_only_node() -> None:
+    merged = merge_script_nodes(
+        [{"src": "https://example.com/app.js", "text": ""}],
+        [{"src": "https://example.com/app.js", "text": "function run() {}"}],
+    )
+
+    assert merged == [
+        {"src": "https://example.com/app.js", "text": "function run() {}"},
+    ]

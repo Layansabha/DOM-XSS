@@ -1,32 +1,37 @@
 # DOM XSS Pipeline
 
-A deployable DOM-based XSS analysis pipeline that combines:
+Production-oriented DOM-XSS triage for URLs and same-origin domains. The
+pipeline renders pages in Chromium, collects browser-parsed JavaScript,
+scores function-level AST token bags with LightGBM, and can pass candidates
+to OWASP ZAP for dynamic verification.
 
-- same-origin crawling for domain-level targets
-- browser-rendered DOM and JavaScript collection with Playwright
-- function-level AST inference with the grouped LightGBM model from `Layansabha/Dom-xss-ML`
-- optional dynamic analysis with OWASP ZAP Client Spider, client-side rules, and active rule 40026
-- Redis/RQ background jobs
-- Docker Compose deployment
-- CI, linting, tests, container scanning, and dependency updates
+| Overview | Use the pipeline | How it works | Model and research | Deployment |
+|---|---|---|---|---|
+| [Capabilities](#capabilities) | [Exact user guide](docs/USAGE.md) | [Technical pipeline](docs/PIPELINE.md) | [Compatibility audit](docs/MODEL-AND-RESEARCH.md) | [Kali and VPS](#deployment) |
 
 > This project is intended only for systems you own or are explicitly authorized to test.
 
-## How it works
+## Capabilities
 
-1. The user submits a URL.
-2. `auto` mode treats a root URL as a domain scan and a non-root URL as a single-page scan.
-3. Playwright renders each in-scope page.
-4. The pipeline collects JavaScript from both the original HTML response and the rendered DOM, plus same-origin external scripts and DOM event handlers. Reading the original response preserves scripts removed by `document.write()` or other runtime DOM mutations.
-5. JavaScript is split into function-sized units and converted into AST token-frequency vectors using a 500-token vocabulary fitted on the training split only.
-6. LightGBM scores only units with at least one vocabulary match. Zero-feature units are reported as insufficient coverage instead of receiving the model's intercept score.
-7. The highest scored function is reported for its page, together with feature coverage and scored-unit counts.
-8. When dynamic analysis is enabled, ZAP Client Spider exercises client-side flows and the browser-based active rule (`40026`) runs once for each collected in-scope page, bounded by `MAX_PAGES`.
-9. The UI separates client-side detections from actively confirmed findings.
+- single-page and bounded same-origin domain scans
+- original HTML, rendered DOM, inline handler, external script, and
+  Chromium runtime-script collection
+- dynamic source capture for scripts parsed through mechanisms such as
+  `eval` and `new Function`
+- function-level Tree-sitter AST token-frequency extraction
+- native LightGBM inference using a pinned 500-token vocabulary
+- optional OWASP ZAP Client Spider and DOM-XSS active rule `40026`
+- asynchronous Redis/RQ jobs with browser-visible progress
+- Docker Compose, health checks, CI, SBOM, Trivy scanning, and GHCR publishing
 
-The ML score is a ranking signal, not a calibrated probability that a page is exploitable. ZAP client-side detections still require review; only active rule `40026` findings are labeled actively confirmed.
+The ML output is a **risk-ranking score**, not the probability that a page is
+exploitable. The complete data flow and the boundary between ML triage and
+dynamic confirmation are documented in
+[How the pipeline works](docs/PIPELINE.md).
 
-## Kali Linux quick start
+## Deployment
+
+### Kali Linux quick start
 
 Requirements:
 
@@ -78,7 +83,11 @@ Remove Redis data as well:
 docker compose down -v
 ```
 
-## VPS deployment
+For the exact UI and API scanning workflow, scope-mode behavior, result
+interpretation, and troubleshooting commands, follow
+[Use the pipeline](docs/USAGE.md).
+
+### VPS deployment
 
 The production override adds Caddy, automatic HTTPS, and HTTP basic authentication. Point an `A`/`AAAA` record at the VPS first, then prepare `.env`:
 
@@ -106,7 +115,7 @@ Allow inbound TCP `80/443` and UDP `443`, then deploy:
 
 The script pulls the published image, recreates the stack, and waits for `/readyz`. If the GHCR package is not public, authenticate the VPS with a GitHub token that has `read:packages` before running it.
 
-## CLI smoke checks
+### CLI smoke checks
 
 ```bash
 curl -fsS http://127.0.0.1:8000/healthz
@@ -127,7 +136,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/scans \
 
 Set `dynamic_verification=true` to run OWASP ZAP after ML analysis.
 
-### Reading the result
+#### Reading the result
 
 - **ML score** ranks code using the leakage-resistant grouped LightGBM model; it is not a confidence percentage or proof of a vulnerability.
 - **Feature coverage** is the share of extracted AST tokens represented in the model's 500-token vocabulary.
@@ -192,6 +201,12 @@ The split is grouped by JavaScript script and the strict test contains only
 unique feature bags unseen by train or validation. Corrupt Excel-truncated,
 zero-coverage, conflicting-label, and duplicate rows are excluded. These
 metrics still do not measure page-level production performance.
+
+The project follows the paper's function-level AST bag-of-words idea and
+script-level split principle, but it is not a reproduction of the paper's DNN,
+modified Chromium/V8 feature extractor, 262,144-bucket feature hashing, or
+full-scale experiment. The exact match and differences are documented in the
+[model and research compatibility audit](docs/MODEL-AND-RESEARCH.md).
 
 ## Development
 
