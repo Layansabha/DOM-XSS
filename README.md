@@ -1,56 +1,80 @@
 # DOM XSS Pipeline
 
-Production-oriented DOM-XSS triage for URLs and same-origin domains. The
-pipeline renders pages in Chromium, collects browser-parsed JavaScript,
-scores function-level AST token bags with LightGBM, and can pass candidates
-to OWASP ZAP for dynamic verification.
+[![CI](https://github.com/Layansabha/DOM-XSS/actions/workflows/ci.yml/badge.svg)](https://github.com/Layansabha/DOM-XSS/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-| Overview | Use the pipeline | How it works | Model and research | Deployment |
-|---|---|---|---|---|
-| [Capabilities](#capabilities) | [Exact user guide](docs/USAGE.md) | [Technical pipeline](docs/PIPELINE.md) | [Compatibility audit](docs/MODEL-AND-RESEARCH.md) | [Kali and VPS](#deployment) |
+An end-to-end pipeline for prioritizing potential DOM-based XSS in a page or
+same-origin domain. It renders the target in Chromium, collects the JavaScript
+the browser sees, ranks function-level code with LightGBM, and can run OWASP
+ZAP for dynamic verification.
 
-> This project is intended only for systems you own or are explicitly authorized to test.
+The machine-learning stage is a fast triage layer. It narrows the code that
+deserves attention; it does not claim that a score alone proves
+exploitability.
 
-## Capabilities
+[Quick start](#quick-start) ·
+[Using the scanner](#using-the-scanner) ·
+[How it works](docs/PIPELINE.md) ·
+[Model and research](docs/MODEL-AND-RESEARCH.md) ·
+[Full user guide](docs/USAGE.md)
 
-- single-page and bounded same-origin domain scans
-- original HTML, rendered DOM, inline handler, external script, and
-  Chromium runtime-script collection
-- dynamic source capture for scripts parsed through mechanisms such as
-  `eval` and `new Function`
-- function-level Tree-sitter AST token-frequency extraction
-- native LightGBM inference using a pinned 500-token vocabulary
-- optional OWASP ZAP Client Spider and DOM-XSS active rule `40026`
-- asynchronous Redis/RQ jobs with browser-visible progress
-- Docker Compose, health checks, CI, SBOM, Trivy scanning, and GHCR publishing
+> Use this project only on systems you own or are explicitly authorized to test.
 
-The ML output is a **risk-ranking score**, not the probability that a page is
-exploitable. The complete data flow and the boundary between ML triage and
-dynamic confirmation are documented in
-[How the pipeline works](docs/PIPELINE.md).
+## Why this project exists
 
-## Deployment
+DOM XSS is created by client-side data flows, so downloading HTML and searching
+for sink names is not enough. A useful pipeline needs to execute the page,
+observe dynamically parsed JavaScript, analyze code at the same function-level
+granularity used during model training, and keep ML suspicion separate from
+dynamic evidence.
 
-### Kali Linux quick start
+This project brings those stages into one reproducible workflow:
+
+```mermaid
+flowchart LR
+    A[URL or domain] --> B[Chromium collection]
+    B --> C[Function-level AST features]
+    C --> D[LightGBM triage]
+    D --> E{ZAP enabled?}
+    E -- No --> F[Ranked findings]
+    E -- Yes --> G[Dynamic evidence]
+```
+
+## What it does
+
+- Accepts a single page or performs a bounded, same-origin crawl.
+- Collects scripts from the original response, rendered DOM, event handlers,
+  loaded resources, and Chromium `Debugger.scriptParsed` events.
+- Captures runtime-created sources such as `eval` and `new Function` when the
+  browser parses them during the visit.
+- Splits JavaScript into bounded function-sized units and converts each unit
+  into AST-token frequencies.
+- Applies the pinned 500-feature vocabulary and native LightGBM model from
+  [`Layansabha/Dom-xss-ML`](https://github.com/Layansabha/Dom-xss-ML).
+- Refuses to score units with zero vocabulary coverage.
+- Optionally runs OWASP ZAP Client Spider and active DOM-XSS rule `40026`.
+- Runs scans asynchronously through Redis/RQ and publishes progress through a
+  web UI and REST API.
+
+## Quick start
 
 Requirements:
 
-- Kali Linux with Docker Engine and Docker Compose v2
-- at least 6 GB free RAM recommended for the API, worker, Chromium, Redis, and ZAP
-- internet access during the first image build so model artifacts and container images can be pulled
+- Docker Engine with Docker Compose v2
+- at least 6 GB of available RAM when ZAP is enabled
+- Git and OpenSSL
 
-Install Docker on Kali if needed:
+On Kali Linux:
 
 ```bash
 sudo apt update
-sudo apt install -y docker.io docker-compose
+sudo apt install -y docker.io docker-compose git openssl
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 newgrp docker
-docker compose version
 ```
 
-Kali packages Compose v2 as `docker-compose`; `docker-compose-plugin` is not available on every Kali mirror. The installed command is still `docker compose`.
+Start the application:
 
 ```bash
 git clone https://github.com/Layansabha/DOM-XSS.git
@@ -59,232 +83,157 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-Put the generated value in `.env` as `ZAP_API_KEY`, then run:
+Place the generated value in `.env` as `ZAP_API_KEY`, then run:
 
 ```bash
-docker compose up --build
-```
-
-Open:
-
-```text
-http://127.0.0.1:8000
-```
-
-Stop the stack:
-
-```bash
-docker compose down
-```
-
-Remove Redis data as well:
-
-```bash
-docker compose down -v
-```
-
-For the exact UI and API scanning workflow, scope-mode behavior, result
-interpretation, and troubleshooting commands, follow
-[Use the pipeline](docs/USAGE.md).
-
-### VPS deployment
-
-The production override adds Caddy, automatic HTTPS, and HTTP basic authentication. Point an `A`/`AAAA` record at the VPS first, then prepare `.env`:
-
-```bash
-cp .env.example .env
-docker run --rm caddy:2.10-alpine caddy hash-password --plaintext 'choose-a-strong-password'
-openssl rand -hex 32
-```
-
-Set the resulting values in `.env`:
-
-```env
-APP_IMAGE=ghcr.io/layansabha/dom-xss:latest
-APP_DOMAIN=scan.example.com
-APP_BASIC_AUTH_USER=admin
-APP_BASIC_AUTH_HASH='$2a$14$replace_with_the_generated_hash'
-ZAP_API_KEY=replace-with-the-generated-random-value
-```
-
-Allow inbound TCP `80/443` and UDP `443`, then deploy:
-
-```bash
-./scripts/deploy.sh
-```
-
-The script pulls the published image, recreates the stack, and waits for `/readyz`. If the GHCR package is not public, authenticate the VPS with a GitHub token that has `read:packages` before running it.
-
-### CLI smoke checks
-
-```bash
-curl -fsS http://127.0.0.1:8000/healthz
+docker compose up --build -d
 curl -fsS http://127.0.0.1:8000/readyz
 ```
 
-Create an ML-only scan:
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+The first startup downloads Chromium, ZAP, Redis, application dependencies,
+and pinned model artifacts. Later startups reuse the local images.
+
+## Using the scanner
+
+Enter a complete HTTP(S) URL and select a scope:
+
+| Mode | Behavior |
+|---|---|
+| `Auto` | A root URL is treated as a domain scan; a non-root path is treated as one page. |
+| `Domain crawl` | Follows safe same-origin links within page and depth limits. |
+| `Single page` | Analyzes only the submitted URL. |
+
+Leave ZAP unchecked for ML-only triage. Enable it only for an authorized target
+when dynamic verification is required; active scanning sends test payloads and
+takes longer.
+
+The same workflow is available through the API:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/api/scans \
   -H 'Content-Type: application/json' \
   -d '{
-    "target_url": "https://example.com/",
-    "scope_mode": "auto",
+    "target_url": "https://example.com/path",
+    "scope_mode": "page",
     "dynamic_verification": false
   }'
 ```
 
-Set `dynamic_verification=true` to run OWASP ZAP after ML analysis.
+The response contains a `status_url` that returns job progress and the final
+result. Interactive API documentation is available at `/docs`.
 
-#### Reading the result
+See the [complete user guide](docs/USAGE.md) for polling, configuration,
+troubleshooting, local-lab scanning, and VPS deployment.
 
-- **ML score** ranks code using the leakage-resistant grouped LightGBM model; it is not a confidence percentage or proof of a vulnerability.
-- **Feature coverage** is the share of extracted AST tokens represented in the model's 500-token vocabulary.
-- **Insufficient coverage** means no collected code unit matched that vocabulary, so the page is intentionally not scored.
-- **Client-side detection** is evidence from a ZAP client rule and needs review/reproduction.
-- **Actively confirmed** means ZAP active rule `40026` produced reproducible scanner evidence.
+## Reading the result correctly
 
-## Configuration
+| Result | Interpretation |
+|---|---|
+| **ML score** | Relative risk ranking for the highest-scoring code unit; not a calibrated exploit probability. |
+| **High priority** | The score crossed `ML_THRESHOLD` and should be reviewed or dynamically tested. |
+| **Feature coverage** | Share of extracted AST-token occurrences represented in the model vocabulary. |
+| **Insufficient coverage** | No code unit had a meaningful vocabulary match, so no ML decision was made. |
+| **Client-side detection** | ZAP browser-side evidence that still requires analyst reproduction. |
+| **Actively confirmed** | ZAP active rule `40026` returned reproducible scanner evidence. |
 
-Copy `.env.example` to `.env`. Important controls:
+A low score does not prove the page is safe. A high score without dynamic
+evidence is a triage finding, not a confirmed vulnerability.
 
-- `ALLOW_PRIVATE_TARGETS=false` blocks loopback, RFC1918, link-local, reserved, and metadata-style destinations.
-- `MAX_QUEUED_SCANS=25` rejects excess work with HTTP 429 instead of exhausting the VPS.
-- `MAX_PAGES=30` limits domain crawls.
-- `MAX_CRAWL_DEPTH=2` limits crawl depth.
-- `CRAWL_DELAY_MS=150` adds a small delay between same-origin page navigations.
-- `REQUEST_TIMEOUT_SECONDS=20` limits page and HTTP operations.
-- `MAX_PAGE_BYTES=5000000` caps collected content per page.
-- `INCLUDE_THIRD_PARTY_SCRIPTS=false` excludes third-party JavaScript from ML analysis by default.
-- `ML_THRESHOLD=0.50` controls the vulnerable-risk classification threshold.
-- `ML_MAX_CODE_UNITS=500` caps function-level inference work per page.
-- `ML_MAX_CODE_UNIT_BYTES=250000` caps the source size of one analyzed unit.
-- `ZAP_MAX_MINUTES=10` limits the combined Client Spider, passive queue, and active verification work.
-- `ZAP_ATTACK_STRENGTH=LOW` limits payload volume.
-- `ZAP_ALERT_THRESHOLD=MEDIUM` reduces noisy alerts.
+## Model and research basis
 
-For an authorized local lab, explicitly set:
+The project is based on the function-level AST bag-of-words idea introduced in
+the WWW 2021 paper
+[Towards a Lightweight, Hybrid Approach for Detecting DOM XSS Vulnerabilities with Machine Learning](https://www.contrib.andrew.cmu.edu/~liminjia/research/papers/www2021-dom-xss-dnn.pdf)
+and its
+[CMU DOM XSS dataset](https://kilthub.cmu.edu/articles/dataset/DOM_XSS_Web_Vulnerability_Dataset/13870256).
 
-```env
-ALLOW_PRIVATE_TARGETS=true
-```
-
-Do not enable this on an internet-facing deployment.
-
-## Artifact provenance
-
-The image build downloads immutable model artifacts from commit:
-
-```text
-f3eff79a4b695ea9c36edf810917889c3b05e9a7
-```
-
-Files:
-
-- `models/lightgbm_grouped_model.txt`
-- `preprocessing/vocab_top500_grouped.json`
-- `models/lightgbm_grouped_metadata.json`
-
-The isolated artifact-build stage verifies file size and Git blob SHA before
-installing the native LightGBM model, JSON vocabulary, and model metadata.
-There is no pickle deserialization and no training-time scikit-learn dependency
-in the image. SHA-256 digests are saved in `artifact-manifest.json`.
-
-Strict held-out function-level metrics from the source repository:
+The deployed classifier is Layan Sabha's LightGBM derivative. It is not the
+paper's TensorFlow DNN and does not claim to reproduce the paper's full
+web-scale experiment. Training uses a deterministic script-level split, a
+vocabulary fitted on training data only, duplicate/conflict removal, and a
+strict test containing feature bags unseen by training or validation.
 
 | Threshold | Precision | Recall | F1 | PR-AUC |
 |---|---:|---:|---:|---:|
 | Validation-selected `0.96085` | 0.9545 | 0.7636 | 0.8485 | 0.9066 |
-| `0.50` pre-filter | 0.8431 | 0.7818 | 0.8113 | 0.9066 |
+| Runtime triage `0.50` | 0.8431 | 0.7818 | 0.8113 | 0.9066 |
 
-The split is grouped by JavaScript script and the strict test contains only
-unique feature bags unseen by train or validation. Corrupt Excel-truncated,
-zero-coverage, conflicting-label, and duplicate rows are excluded. These
-metrics still do not measure page-level production performance.
+These are function-level results on the cleaned sampled derivative dataset,
+not page-level accuracy on the public web. The runtime uses `0.50` as a
+recall-oriented triage threshold before optional ZAP analysis.
 
-The project follows the paper's function-level AST bag-of-words idea and
-script-level split principle, but it is not a reproduction of the paper's DNN,
-modified Chromium/V8 feature extractor, 262,144-bucket feature hashing, or
-full-scale experiment. The exact match and differences are documented in the
-[model and research compatibility audit](docs/MODEL-AND-RESEARCH.md).
+The [model and research audit](docs/MODEL-AND-RESEARCH.md) documents what
+matches the study, what intentionally differs, and what still needs validation
+before making a commercial accuracy claim.
+
+## Deployment and security
+
+The default Compose stack binds the application to localhost and does not
+publish Redis or the ZAP API. The production override adds Caddy, automatic
+HTTPS, and basic authentication for a VPS.
+
+Security controls include:
+
+- URL normalization, DNS resolution, redirect validation, and browser-request
+  checks
+- private, loopback, reserved, link-local, and metadata-style target blocking
+  by default
+- same-origin crawl boundaries and conservative destructive-link filtering
+- page, depth, byte, queue, and scan-time limits
+- a non-root application container and API request-size limits
+- immutable model provenance with SHA verification and no pickle
+  deserialization
+- CI unit tests, Ruff, mypy, dependency auditing, Trivy image scanning, SBOM,
+  and provenance attestation
+
+For an authorized local lab, set `ALLOW_PRIVATE_TARGETS=true`. Do not enable
+that setting on a public deployment.
+
+## Repository guides
+
+| Guide | Purpose |
+|---|---|
+| [Use the pipeline](docs/USAGE.md) | Exact Kali, UI, API, result, and troubleshooting steps. |
+| [How the pipeline works](docs/PIPELINE.md) | Technical flow from URL validation through ZAP evidence. |
+| [Model and research compatibility](docs/MODEL-AND-RESEARCH.md) | Evidence-backed comparison with the CMU study and model limitations. |
+| [Security policy](SECURITY.md) | Supported versions and responsible vulnerability reporting. |
 
 ## Development
-
-Create a local virtual environment:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 playwright install chromium
+
 pytest
 ruff check .
 mypy app
 ```
 
-Run the API and worker locally:
-
-```bash
-redis-server
-uvicorn app.main:app --reload
-rq worker domxss --url redis://127.0.0.1:6379/0
-```
-
-The native model files must exist under `artifacts/`. To fetch and verify the
-commit-pinned artifacts locally:
+Model artifacts are fetched from a commit-pinned source during the image build
+and verified before installation. To prepare them for local development:
 
 ```bash
 ARTIFACT_DIR=artifacts python3 scripts/prepare_artifacts.py
 ```
 
-## API
+## Current limitations
 
-- `POST /api/scans` creates a background scan.
-- `GET /api/scans/{job_id}` returns queued/running/finished/failed state.
-- `GET /healthz` confirms the API process is alive.
-- `GET /readyz` confirms Redis and model artifacts are available.
-
-OpenAPI documentation is available at `/docs`.
-
-## Security design
-
-- URL normalization and DNS resolution before requests
-- private/reserved IP rejection by default
-- redirect and browser-request checks with DNS re-resolution on every request
-- same-origin crawl boundary and conservative skip rules for logout/delete/download links
-- strict page, depth, byte, and time limits
-- no public ZAP port
-- ZAP API key
-- DOM-XSS-only active scan policy plus bounded Client Spider coverage
-- non-root application user
-- Redis not published to the host
-- security headers and API request-size limits
-- CI lint, unit tests, dependency audit, and Trivy image scan
-- automatic GHCR publishing only after all CI and container security gates pass
-- image provenance attestation and SBOM generation
-- optional Caddy TLS and basic authentication for VPS exposure
-
-## Known limitations
-
-- The training dataset represents individual JavaScript functions as bags of parsed AST tokens. This runtime follows that function-level contract with Tree-sitter, but it cannot exactly reproduce the modified Chromium/V8 instrumentation that created the original dataset. The UI exposes feature coverage and refuses to score zero-feature units, but the extractor still needs validation against a labeled deployment set.
-- The available sampled workbooks contained 3,290 Excel-truncated feature dictionaries. The grouped model rejects them rather than silently converting them to zero vectors; a complete retraining from the raw CMU `.xz` release remains the preferred next dataset revision.
-- After strict deduplication, the held-out test contains 55 independent positive feature bags. Reported metrics therefore have materially wider uncertainty than the former row-random split implied.
-- A low ML score does not rule out DOM XSS. For example, feature importance does not imply that every occurrence of `innerHTML` increases the model output; dynamic ZAP analysis remains important.
-- Automated scanners can miss interaction-dependent or authentication-dependent DOM XSS.
-- Authenticated crawling is not implemented yet.
-- DNS re-resolution narrows but cannot completely eliminate DNS-rebinding time-of-check/time-of-use risk. Production deployments should also enforce outbound network policy and metadata-service blocking.
-- The base Compose exposure is localhost-only. The production override adds authentication and TLS; add infrastructure-level rate limiting and an egress allowlist before exposing it to untrusted users.
-- Some applications intentionally block headless browsers.
+- Standard Chromium plus Tree-sitter cannot reproduce the study's modified
+  Chromium 57/V8 taint instrumentation byte for byte.
+- The current model was trained on a cleaned sample; retraining from the raw
+  CMU `.xz` release remains the preferred dataset revision.
+- Authenticated crawling and custom interaction scripts are not implemented.
+- Headless-browser blocking and unvisited interaction-dependent paths can
+  reduce coverage.
+- Automated ML and ZAP analysis can produce both false positives and false
+  negatives.
 
 ## License
 
-MIT. Model artifacts remain attributable to their source repository and are downloaded during the image build rather than copied into this repository.
-
-## References
-
-- [DOM XSS Web Vulnerability Dataset](https://kilthub.cmu.edu/articles/dataset/DOM_XSS_Web_Vulnerability_Dataset/13870256)
-- [Function-level AST feature representation used by the source research](https://www.contrib.andrew.cmu.edu/~liminjia/research/papers/www2021-dom-xss-dnn.pdf)
-- [OWASP ZAP DOM XSS active scan rule 40026](https://www.zaproxy.org/docs/alerts/40026/)
-- [OWASP ZAP Client Spider](https://www.zaproxy.org/docs/desktop/addons/client-side-integration/spider/)
-- [OWASP ZAP vs Google Firing Range](https://www.zaproxy.org/docs/scans/firingrange/)
-- [OWASP ZAP Docker guide](https://www.zaproxy.org/docs/docker/about/)
+The application is released under the [MIT License](LICENSE). Model and dataset
+provenance remain attributed to their respective source repositories and
+research publication.
