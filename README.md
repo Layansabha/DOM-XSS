@@ -16,7 +16,8 @@ exploitability.
 [Using the scanner](#using-the-scanner) ·
 [How it works](docs/PIPELINE.md) ·
 [Model and research](docs/MODEL-AND-RESEARCH.md) ·
-[Terraform deployment](infra/terraform/README.md) ·
+[Free local Terraform](infra/terraform/local/README.md) ·
+[Optional cloud Terraform](infra/terraform/README.md) ·
 [Full user guide](docs/USAGE.md)
 
 > Use this project only on systems you own or are explicitly authorized to test.
@@ -95,6 +96,25 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 The first startup downloads Chromium, ZAP, Redis, application dependencies,
 and pinned model artifacts. Later startups reuse the local images.
+
+### Free Terraform deployment with observability
+
+The recommended DevOps demonstration is the fully local Terraform stack. It
+uses the same Compose application, generates local secrets outside Terraform
+state, and adds Prometheus, Grafana, cAdvisor, persistent monitoring data, and
+a provisioned container dashboard without creating cloud resources.
+
+```bash
+cp infra/terraform/local/terraform.tfvars.example \
+  infra/terraform/local/terraform.tfvars
+make tf-local-plan
+make tf-local-apply
+```
+
+Default endpoints are the application on `127.0.0.1:8000`, Prometheus on
+`127.0.0.1:9090`, and Grafana on `127.0.0.1:3000`. See the
+[free local deployment guide](infra/terraform/local/README.md) for lifecycle,
+configuration, security scope, and teardown instructions.
 
 ## Using the scanner
 
@@ -175,9 +195,15 @@ The default Compose stack binds the application to localhost and does not
 publish Redis or the ZAP API. The production override adds Caddy, automatic
 HTTPS, and basic authentication for a VPS.
 
-The [Terraform stack](infra/terraform/README.md) provisions a production
+The [free local Terraform stack](infra/terraform/local/README.md) manages the
+Compose lifecycle and adds loopback-only Prometheus and Grafana endpoints with
+cAdvisor container metrics. It uses only local open-source tooling and keeps
+runtime secrets outside Terraform state.
+
+The [optional cloud Terraform stack](infra/terraform/README.md) provisions a
 Hetzner Cloud VPS, restricted firewall, managed SSH key, and secure cloud-init
-bootstrap. Application secrets are deliberately kept out of Terraform state.
+bootstrap. Applying that stack creates billable cloud resources; it is not
+required for the local deployment.
 
 Security controls include:
 
@@ -190,8 +216,8 @@ Security controls include:
 - a non-root application container and API request-size limits
 - immutable model provenance with SHA verification and no pickle
   deserialization
-- CI unit tests, Ruff, mypy, dependency auditing, Trivy image scanning, SBOM,
-  and provenance attestation
+- CI unit tests, Ruff, mypy, dependency auditing, Terraform tests, Compose
+  validation, Trivy image scanning, SBOM, and provenance attestation
 
 For an authorized local lab, set `ALLOW_PRIVATE_TARGETS=true`. Do not enable
 that setting on a public deployment.
@@ -203,7 +229,8 @@ that setting on a public deployment.
 | [Use the pipeline](docs/USAGE.md) | Exact Kali, UI, API, VPS, result, and troubleshooting steps. |
 | [How the pipeline works](docs/PIPELINE.md) | Technical flow from URL validation through ZAP evidence. |
 | [Model and research compatibility](docs/MODEL-AND-RESEARCH.md) | Evidence-backed comparison with the CMU study and model limitations. |
-| [Provision infrastructure](infra/terraform/README.md) | Terraform-based Hetzner VPS, firewall, Docker bootstrap, and teardown. |
+| [Free local infrastructure](infra/terraform/local/README.md) | Zero-cost Terraform lifecycle, monitoring, dashboards, and teardown. |
+| [Optional cloud infrastructure](infra/terraform/README.md) | Hetzner VPS, firewall, Docker bootstrap, and teardown reference. |
 | [Security policy](SECURITY.md) | Supported versions and responsible vulnerability reporting. |
 
 ## Development

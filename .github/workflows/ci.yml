@@ -97,9 +97,12 @@ jobs:
 
   terraform:
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: infra/terraform
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - infra/terraform
+          - infra/terraform/local
     steps:
       - uses: actions/checkout@v4
 
@@ -108,16 +111,16 @@ jobs:
           terraform_version: "1.15.8"
 
       - name: Format
-        run: terraform fmt -check -recursive
+        run: terraform -chdir="${{ matrix.stack }}" fmt -check
 
       - name: Initialize
-        run: terraform init -backend=false
+        run: terraform -chdir="${{ matrix.stack }}" init -backend=false
 
       - name: Validate
-        run: terraform validate
+        run: terraform -chdir="${{ matrix.stack }}" validate
 
       - name: Test
-        run: terraform test
+        run: terraform -chdir="${{ matrix.stack }}" test
 
   container:
     runs-on: ubuntu-24.04
@@ -133,11 +136,15 @@ jobs:
           git fetch --quiet --depth=1 origin "${REVISION}"
           git checkout --quiet FETCH_HEAD
 
-      - name: Validate Compose
+      - name: Validate Compose and monitoring configuration
         run: |
           cp .env.example .env
           docker compose config --quiet
           docker compose -f compose.yaml -f deploy/compose.prod.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose.observability.yaml config --quiet
+          bash -n infra/terraform/local/scripts/apply.sh
+          bash -n infra/terraform/local/scripts/destroy.sh
+          python -m json.tool deploy/monitoring/grafana/dashboards/dom-xss-containers.json >/dev/null
 
       - name: Redis Compose smoke test
         run: |

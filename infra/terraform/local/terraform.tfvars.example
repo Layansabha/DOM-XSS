@@ -1,0 +1,7 @@
+enable_observability = true
+build_images         = true
+destroy_volumes      = false
+
+app_port        = 8000
+prometheus_port = 9090
+grafana_port    = 3000

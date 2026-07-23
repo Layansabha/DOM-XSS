@@ -1,4 +1,9 @@
-.PHONY: up down logs build test lint typecheck audit tf-fmt tf-validate tf-test
+TF_HETZNER_DIR := infra/terraform
+TF_LOCAL_DIR := infra/terraform/local
+
+.PHONY: up down logs build test lint typecheck audit \
+	tf-fmt tf-validate tf-test \
+	tf-local-plan tf-local-apply tf-local-output tf-local-destroy
 
 up:
 	docker compose up --build
@@ -25,11 +30,28 @@ audit:
 	pip-audit
 
 tf-fmt:
-	terraform -chdir=infra/terraform fmt -recursive
+	terraform fmt -recursive infra/terraform
 
 tf-validate:
-	terraform -chdir=infra/terraform init -backend=false
-	terraform -chdir=infra/terraform validate
+	terraform -chdir=$(TF_HETZNER_DIR) init -backend=false
+	terraform -chdir=$(TF_HETZNER_DIR) validate
+	terraform -chdir=$(TF_LOCAL_DIR) init -backend=false
+	terraform -chdir=$(TF_LOCAL_DIR) validate
 
 tf-test:
-	terraform -chdir=infra/terraform test
+	terraform -chdir=$(TF_HETZNER_DIR) test
+	terraform -chdir=$(TF_LOCAL_DIR) test
+
+tf-local-plan:
+	terraform -chdir=$(TF_LOCAL_DIR) init -backend=false
+	terraform -chdir=$(TF_LOCAL_DIR) plan
+
+tf-local-apply:
+	terraform -chdir=$(TF_LOCAL_DIR) init -backend=false
+	terraform -chdir=$(TF_LOCAL_DIR) apply
+
+tf-local-output:
+	terraform -chdir=$(TF_LOCAL_DIR) output
+
+tf-local-destroy:
+	terraform -chdir=$(TF_LOCAL_DIR) destroy
