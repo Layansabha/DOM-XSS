@@ -1,4 +1,21 @@
-# Hetzner Cloud Terraform deployment
+# Terraform deployments
+
+This repository includes two Terraform workflows:
+
+| Stack | Cost | Purpose |
+|---|---:|---|
+| [`local/`](local/README.md) | Free | Recommended local DevOps deployment using Docker Compose, Prometheus, Grafana, and cAdvisor. |
+| This directory | Paid when applied | Optional Hetzner Cloud reference architecture for a public production VPS. |
+
+For a fully free deployment, use the [`local`](local/README.md) stack. It needs
+only Terraform, Docker, Docker Compose, and OpenSSL on the local Linux machine.
+No cloud account, domain, payment card, or hosted Terraform service is required.
+
+The remaining documentation on this page describes the optional Hetzner Cloud
+stack. Running `terraform plan` is free, but running `terraform apply` in this
+directory creates billable cloud resources.
+
+# Optional Hetzner Cloud deployment
 
 This stack provisions the production host used by the DOM XSS pipeline. It
 creates a Hetzner Cloud server, restricted network firewall, managed SSH key,
