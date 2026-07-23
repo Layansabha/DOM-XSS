@@ -146,7 +146,9 @@ local images and are much faster.
 ## VPS deployment
 
 The production override adds Caddy, automatic HTTPS, and HTTP basic
-authentication. Before deploying:
+authentication. The host can be created reproducibly with the
+[Terraform stack](../infra/terraform/README.md), or prepared manually. Before
+deploying:
 
 1. Point the target domain's `A` or `AAAA` record to the VPS.
 2. Allow inbound TCP `80/443` and UDP `443`.

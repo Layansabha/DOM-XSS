@@ -9,6 +9,8 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+chmod 600 .env
+
 if ! docker info >/dev/null 2>&1; then
   echo "Docker is unavailable or the current user cannot access its daemon." >&2
   exit 1

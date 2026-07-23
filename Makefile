@@ -1,4 +1,4 @@
-.PHONY: up down logs build test lint typecheck audit
+.PHONY: up down logs build test lint typecheck audit tf-fmt tf-validate tf-test
 
 up:
 	docker compose up --build
@@ -23,3 +23,13 @@ typecheck:
 
 audit:
 	pip-audit
+
+tf-fmt:
+	terraform -chdir=infra/terraform fmt -recursive
+
+tf-validate:
+	terraform -chdir=infra/terraform init -backend=false
+	terraform -chdir=infra/terraform validate
+
+tf-test:
+	terraform -chdir=infra/terraform test

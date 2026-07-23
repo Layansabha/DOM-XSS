@@ -1,0 +1,20 @@
+project_name = "dom-xss"
+environment  = "production"
+
+location     = "nbg1"
+server_type  = "cpx31"
+server_image = "ubuntu-24.04"
+
+# Generate with: ssh-keygen -t ed25519 -f ~/.ssh/domxss_hetzner
+ssh_public_key = "REPLACE_WITH_CONTENTS_OF_YOUR_PUBLIC_KEY"
+
+# Replace with the public IP used to administer the VPS.
+# Never leave SSH open to 0.0.0.0/0 on a production deployment.
+admin_cidrs = ["203.0.113.10/32"]
+
+repository_url = "https://github.com/Layansabha/DOM-XSS.git"
+repository_ref = "main"
+
+enable_ipv6              = true
+enable_backups           = false
+enable_delete_protection = true

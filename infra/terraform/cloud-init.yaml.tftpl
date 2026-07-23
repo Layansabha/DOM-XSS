@@ -1,0 +1,122 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+ssh_pwauth: false
+disable_root: true
+
+users:
+  - default
+  - name: deploy
+    gecos: DOM XSS deployment user
+    groups:
+      - sudo
+    shell: /bin/bash
+    sudo:
+      - ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-dom-xss-hardening.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      PubkeyAuthentication yes
+      X11Forwarding no
+      AllowAgentForwarding no
+
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: "0644"
+    content: |
+      {
+        "live-restore": true,
+        "log-driver": "local",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+
+  - path: /etc/systemd/system/dom-xss.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=DOM XSS production Compose stack
+      Requires=docker.service
+      After=docker.service network-online.target
+      Wants=network-online.target
+      ConditionPathExists=/opt/dom-xss/.env
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/dom-xss
+      ExecStartPre=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.prod.yaml pull
+      ExecStart=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.prod.yaml up -d --no-build --remove-orphans
+      ExecStop=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.prod.yaml down
+      TimeoutStartSec=900
+      TimeoutStopSec=180
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/sbin/dom-xss-bootstrap
+    owner: root:root
+    permissions: "0700"
+    content: |
+      #!/usr/bin/env bash
+      set -Eeuo pipefail
+
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        -o /etc/apt/keyrings/docker.asc
+      chmod a+r /etc/apt/keyrings/docker.asc
+
+      docker_arch="$(dpkg --print-architecture)"
+      ubuntu_codename="$(. /etc/os-release && printf '%s' "$VERSION_CODENAME")"
+      printf '%s\n' \
+        "deb [arch=$docker_arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $ubuntu_codename stable" \
+        >/etc/apt/sources.list.d/docker.list
+
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        docker-ce \
+        docker-ce-cli \
+        containerd.io \
+        docker-buildx-plugin \
+        docker-compose-plugin
+
+      systemctl enable --now docker
+      usermod -aG docker deploy
+
+      repository_url="$(printf '%s' '${repository_url_b64}' | base64 --decode)"
+      repository_ref="$(printf '%s' '${repository_ref_b64}' | base64 --decode)"
+
+      install -d -o deploy -g deploy /opt/dom-xss
+      sudo -u deploy git -C /opt/dom-xss init
+      sudo -u deploy git -C /opt/dom-xss remote add origin "$repository_url"
+      sudo -u deploy git -C /opt/dom-xss fetch --depth=1 origin "$repository_ref"
+      sudo -u deploy git -C /opt/dom-xss checkout --detach FETCH_HEAD
+
+      systemctl daemon-reload
+      systemctl enable dom-xss.service
+      systemctl restart ssh
+      touch /var/lib/dom-xss-bootstrap.ready
+
+runcmd:
+  - [bash, /usr/local/sbin/dom-xss-bootstrap]
+
+final_message: "DOM XSS host bootstrap completed after $UPTIME seconds."

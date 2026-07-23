@@ -16,6 +16,7 @@ exploitability.
 [Using the scanner](#using-the-scanner) ·
 [How it works](docs/PIPELINE.md) ·
 [Model and research](docs/MODEL-AND-RESEARCH.md) ·
+[Terraform deployment](infra/terraform/README.md) ·
 [Full user guide](docs/USAGE.md)
 
 > Use this project only on systems you own or are explicitly authorized to test.
@@ -174,6 +175,10 @@ The default Compose stack binds the application to localhost and does not
 publish Redis or the ZAP API. The production override adds Caddy, automatic
 HTTPS, and basic authentication for a VPS.
 
+The [Terraform stack](infra/terraform/README.md) provisions a production
+Hetzner Cloud VPS, restricted firewall, managed SSH key, and secure cloud-init
+bootstrap. Application secrets are deliberately kept out of Terraform state.
+
 Security controls include:
 
 - URL normalization, DNS resolution, redirect validation, and browser-request
@@ -198,6 +203,7 @@ that setting on a public deployment.
 | [Use the pipeline](docs/USAGE.md) | Exact Kali, UI, API, VPS, result, and troubleshooting steps. |
 | [How the pipeline works](docs/PIPELINE.md) | Technical flow from URL validation through ZAP evidence. |
 | [Model and research compatibility](docs/MODEL-AND-RESEARCH.md) | Evidence-backed comparison with the CMU study and model limitations. |
+| [Provision infrastructure](infra/terraform/README.md) | Terraform-based Hetzner VPS, firewall, Docker bootstrap, and teardown. |
 | [Security policy](SECURITY.md) | Supported versions and responsible vulnerability reporting. |
 
 ## Development
