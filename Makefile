@@ -32,10 +32,10 @@ audit:
 
 release:
 	@test -n "$(IMAGE)" || (echo "Usage: make release IMAGE=ghcr.io/layansabha/dom-xss:sha-..." >&2; exit 2)
-	./deploy/release.sh "$(IMAGE)"
+	bash deploy/release.sh "$(IMAGE)"
 
 rollback:
-	./deploy/rollback.sh
+	bash deploy/rollback.sh
 
 tf-fmt:
 	terraform fmt -recursive infra/terraform
