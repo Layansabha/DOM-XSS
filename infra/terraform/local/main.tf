@@ -45,7 +45,7 @@ resource "terraform_data" "local_stack" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/apply.sh"
+    command = "bash ${path.module}/scripts/apply.sh"
 
     environment = {
       REPOSITORY_ROOT      = self.input.repository_root
@@ -60,7 +60,7 @@ resource "terraform_data" "local_stack" {
 
   provisioner "local-exec" {
     when    = destroy
-    command = "${self.input.repository_root}/infra/terraform/local/scripts/destroy.sh"
+    command = "bash ${self.input.repository_root}/infra/terraform/local/scripts/destroy.sh"
 
     environment = {
       REPOSITORY_ROOT      = self.input.repository_root
