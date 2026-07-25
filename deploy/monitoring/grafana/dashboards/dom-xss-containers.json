@@ -4,7 +4,7 @@
   },
   "editable": false,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
   "links": [],
   "liveNow": false,
@@ -16,7 +16,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -41,13 +41,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]))",
-          "legendFormat": "{{name}}",
+          "expr": "sum by (path) (rate(dom_xss_http_requests_total[5m]))",
+          "legendFormat": "{{path}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container CPU usage",
+      "title": "API request rate",
       "type": "timeseries"
     },
     {
@@ -57,7 +57,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -82,13 +82,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (name) (container_memory_working_set_bytes{name!=\"\"})",
-          "legendFormat": "{{name}}",
+          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(dom_xss_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{path}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container working-set memory",
+      "title": "API p95 latency",
       "type": "timeseries"
     },
     {
@@ -98,7 +98,187 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps"
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "dom_xss_queue_depth",
+          "legendFormat": "Queued jobs",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Queue depth",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "dom_xss_workers",
+          "legendFormat": "Workers",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active workers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "dom_xss_scan_duration_seconds_sum / clamp_min(dom_xss_scan_duration_seconds_count, 1)",
+          "legendFormat": "Average duration",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Average scan duration",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "dom_xss_operational_metrics_redis_available",
+          "legendFormat": "Redis available",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Metrics data source",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
         },
         "overrides": []
       },
@@ -106,9 +286,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 14
       },
-      "id": 3,
+      "id": 7,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -123,13 +303,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!=\"\"}[5m]))",
-          "legendFormat": "{{name}}",
+          "expr": "increase(dom_xss_scans_completed_total[1h])",
+          "legendFormat": "Completed",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "increase(dom_xss_scans_failed_total[1h])",
+          "legendFormat": "Failed",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Container network receive",
+      "title": "Scan outcomes per hour",
       "type": "timeseries"
     },
     {
@@ -139,7 +326,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps"
+          "decimals": 0
         },
         "overrides": []
       },
@@ -147,9 +334,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 14
       },
-      "id": 4,
+      "id": 8,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -164,13 +351,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[5m]))",
-          "legendFormat": "{{name}}",
+          "expr": "increase(dom_xss_pages_collected_total[1h])",
+          "legendFormat": "Pages collected",
           "range": true,
           "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "increase(dom_xss_zap_failures_total[1h])",
+          "legendFormat": "ZAP failures",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Container network transmit",
+      "title": "Pipeline activity per hour",
       "type": "timeseries"
     }
   ],
@@ -178,9 +372,8 @@
   "schemaVersion": 41,
   "tags": [
     "dom-xss",
-    "docker",
-    "terraform",
-    "local"
+    "application",
+    "operations"
   ],
   "templating": {
     "list": []
@@ -191,8 +384,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "DOM XSS Local Containers",
-  "uid": "dom-xss-local",
+  "title": "DOM XSS Operations",
+  "uid": "dom-xss-operations",
   "version": 1,
   "weekStart": ""
 }

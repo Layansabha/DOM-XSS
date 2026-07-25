@@ -1,74 +1,77 @@
 # Hetzner VPS Terraform reference
 
-This directory contains an optional Terraform configuration for a single
-Hetzner Cloud VPS. Running `terraform plan` is free, but `terraform apply`
-creates billable cloud resources.
+This directory contains an optional Terraform configuration for one Hetzner
+Cloud VPS. `terraform plan` is free, while `terraform apply` creates billable
+cloud resources.
 
-The stack creates a server, a restricted network firewall, a managed SSH key,
-and a cloud-init bootstrap for Docker Engine and Docker Compose. It is a
-single-server deployment reference, not a highly available platform.
+The configuration demonstrates infrastructure provisioning for a small
+single-server deployment. It is not a highly available or autoscaling platform.
 
-Terraform does **not** deploy application secrets. Values such as
-`ZAP_API_KEY` and the Caddy password hash stay outside Terraform state and are
-copied to the server only after provisioning.
+## What it creates
 
-## Resources
-
-- Ubuntu 24.04 VPS with configurable location and server type
-- IPv4 and optional IPv6
-- Hetzner Cloud firewall:
-  - SSH only from `admin_cidrs`
-  - public HTTP, HTTPS, and HTTP/3
-  - ICMP for diagnostics and required IPv6 behavior
-- Hetzner-managed SSH public key
+- one Ubuntu 24.04 VPS
+- a managed SSH public key
+- a firewall that allows:
+  - SSH only from the configured administration CIDRs
+  - public TCP 80 and 443
+  - ICMP for diagnostics and IPv6 operation
 - optional paid server backups
-- server deletion and rebuild protection
-- cloud-init bootstrap that:
+- deletion and rebuild protection
+- cloud-init configuration that:
   - creates a non-root `deploy` user
-  - disables SSH passwords and root login
-  - installs Docker from Docker's official Ubuntu repository
-  - enables unattended operating-system upgrades
+  - disables SSH password authentication and root login
+  - installs Docker Engine and Docker Compose
+  - enables unattended operating-system updates
   - configures bounded Docker log rotation
-  - checks out the requested repository revision in `/opt/dom-xss`
-  - installs a systemd unit for restart-on-boot behavior
+  - checks out an explicit release tag or commit
+  - installs a systemd service for restart-on-boot behaviour
 
-The default `cpx31` size provides 8 GB RAM, which is the practical minimum for
-running Chromium and OWASP ZAP together. Choose a smaller server only when ZAP
-verification is disabled.
+Terraform does not place application secrets in state. Runtime values such as
+`ZAP_API_KEY` and the Caddy password hash remain in `.env`, which is copied to
+the server over SSH.
 
 ## Requirements
 
 - Terraform 1.14 or newer
-- a Hetzner Cloud project and read/write API token
+- a Hetzner Cloud project and API token
 - an SSH key pair
 - a domain whose DNS records you can update
 
-Create a dedicated SSH key:
+The default `cpx31` server provides 8 GB RAM. This is appropriate when Chromium
+and OWASP ZAP run together. Review current Hetzner pricing before applying.
+
+## Configure
+
+Generate a dedicated SSH key:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/domxss_hetzner
 ```
 
-## Configure
+Create the local variable file:
 
 ```bash
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Edit `terraform.tfvars`:
+Set the following values:
 
-- replace `ssh_public_key` with the contents of
-  `~/.ssh/domxss_hetzner.pub`
-- replace `admin_cidrs` with your public administration IP followed by `/32`
-- review the selected location, server size, backup setting, and repository ref
+- `ssh_public_key`: contents of `~/.ssh/domxss_hetzner.pub`
+- `admin_cidrs`: the administration IP followed by `/32` for IPv4 or `/128` for IPv6
+- `repository_ref`: a release tag such as `v1.0.0` or a full commit SHA
+- location, server size, IPv6, backup, and deletion-protection settings
 
-Expose the Hetzner token as an environment variable. Do not write it in a
-`.tf` or `.tfvars` file:
+Mutable `main` and `master` refs are rejected. This prevents a later deployment
+from silently checking out different application code.
+
+Expose the Hetzner token only through the environment:
 
 ```bash
 export HCLOUD_TOKEN='replace-with-the-project-token'
 ```
+
+Do not put the token in `.tf` or `.tfvars` files.
 
 ## Validate and provision
 
@@ -81,8 +84,8 @@ terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
-`terraform apply` creates billable Hetzner resources. Review the plan before
-approving it.
+Review the plan before approving it. Applying the plan creates billable
+resources.
 
 Read the connection details:
 
@@ -92,16 +95,16 @@ terraform output -raw ssh_command
 terraform output -raw bootstrap_status_command
 ```
 
-Wait for the bootstrap to finish:
+Wait for cloud-init:
 
 ```bash
 ssh deploy@"$(terraform output -raw server_ipv4)" \
   'sudo cloud-init status --wait && docker compose version'
 ```
 
-## Configure and start the application
+## Deploy a versioned image
 
-From the repository root, prepare the runtime file locally:
+Prepare `.env` from the repository root:
 
 ```bash
 cp .env.example .env
@@ -110,10 +113,21 @@ docker run --rm caddy:2.10-alpine \
 openssl rand -hex 32
 ```
 
-Set at least `APP_DOMAIN`, `APP_BASIC_AUTH_USER`,
-`APP_BASIC_AUTH_HASH`, and `ZAP_API_KEY` in `.env`. Then copy the file over the
-encrypted SSH connection and deploy. The deployment script restricts the
-runtime file to its owner before starting the stack:
+Set at least:
+
+```env
+APP_IMAGE=ghcr.io/layansabha/dom-xss:v1.0.0
+APP_DOMAIN=scan.example.com
+APP_BASIC_AUTH_USER=admin
+APP_BASIC_AUTH_HASH=replace-with-the-generated-caddy-hash
+ZAP_API_KEY=replace-with-the-generated-random-value
+```
+
+The deployment script rejects `latest` and the local development image. Use a
+version tag, commit tag, or digest so that deployment and rollback are
+predictable.
+
+Copy the runtime file and deploy:
 
 ```bash
 SERVER_IP="$(terraform -chdir=infra/terraform output -raw server_ipv4)"
@@ -125,15 +139,22 @@ ssh "deploy@$SERVER_IP" \
 Point the domain's `A` record to `server_ipv4` and, when enabled, its `AAAA`
 record to `server_ipv6`. Caddy obtains the TLS certificate after DNS resolves.
 
-The enabled `dom-xss.service` starts the Compose stack automatically on later
-server boots once `/opt/dom-xss/.env` exists.
+## Rollback
+
+Set `APP_IMAGE` to the previous version or commit tag and run:
+
+```bash
+./deploy/deploy.sh
+```
+
+The script pulls that exact image and waits for `/readyz` before reporting a
+successful deployment.
 
 ## State and teardown
 
 Terraform state can contain infrastructure identifiers and must not be
-committed. This repository ignores local state and variable files. For a team
-deployment, configure an encrypted remote backend with locking before the
-first apply.
+committed. For team use, configure an encrypted remote backend with state
+locking before the first apply.
 
 Deletion protection intentionally blocks accidental teardown. To destroy the
 environment:

@@ -30,9 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get upgrade --yes --no-install-recommends \
     && apt-get install --yes --no-install-recommends libgomp1 python3.12-venv \
-    && apt-get autoremove --yes \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

@@ -15,9 +15,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_env: str = "production"
-    app_host: str = "0.0.0.0"
-    app_port: int = 8000
     log_level: str = "INFO"
 
     redis_url: str = "redis://redis:6379/0"

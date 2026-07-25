@@ -6,45 +6,39 @@
 An end-to-end pipeline for prioritizing potential DOM-based XSS in a page or
 same-origin domain. It renders the target in Chromium, collects the JavaScript
 the browser sees, ranks function-level code with LightGBM, and can run OWASP
-ZAP for dynamic verification.
+ZAP for authorized dynamic verification.
 
-The machine-learning stage is a fast triage layer. It narrows the code that
-deserves attention; it does not claim that a score alone proves
-exploitability.
+The machine-learning stage is a triage layer. It narrows the code that deserves
+review; it does not claim that a score alone proves exploitability or safety.
 
 [Quick start](#quick-start) ·
 [Using the scanner](#using-the-scanner) ·
+[Operational design](#operational-design) ·
+[Monitoring](#application-monitoring) ·
 [How it works](docs/PIPELINE.md) ·
 [Model and research](docs/MODEL-AND-RESEARCH.md) ·
-[Optional monitoring](#optional-local-monitoring) ·
-[Optional VPS Terraform](infra/terraform/README.md) ·
 [Full user guide](docs/USAGE.md)
 
 > Use this project only on systems you own or are explicitly authorized to test.
 
-## Why this project exists
-
-DOM XSS is created by client-side data flows, so downloading HTML and searching
-for sink names is not enough. A useful pipeline needs to execute the page,
-observe dynamically parsed JavaScript, analyze code at the same function-level
-granularity used during model training, and keep ML suspicion separate from
-dynamic evidence.
-
-This project brings those stages into one reproducible workflow:
+## Pipeline
 
 ```mermaid
 flowchart LR
-    A[URL or domain] --> B[Chromium collection]
-    B --> C[Function-level AST features]
-    C --> D[LightGBM triage]
-    D --> E{ZAP enabled?}
-    E -- No --> F[Ranked findings]
-    E -- Yes --> G[Dynamic evidence]
+    A[URL or domain] --> B[FastAPI]
+    B --> C[Redis queue]
+    C --> D[RQ worker]
+    D --> E[Chromium collection]
+    E --> F[Function-level AST features]
+    F --> G[LightGBM triage]
+    G --> H{ZAP enabled?}
+    H -- No --> I[Ranked findings]
+    H -- Yes --> J[Dynamic evidence]
 ```
 
 ## What it does
 
-- Accepts a single page or performs a bounded, same-origin crawl.
+- Accepts a single page or performs a bounded same-origin crawl.
 - Collects scripts from the original response, rendered DOM, event handlers,
   loaded resources, and Chromium `Debugger.scriptParsed` events.
 - Captures runtime-created sources such as `eval` and `new Function` when the
@@ -55,16 +49,16 @@ flowchart LR
   [`Layansabha/Dom-xss-ML`](https://github.com/Layansabha/Dom-xss-ML).
 - Refuses to score units with zero vocabulary coverage.
 - Optionally runs OWASP ZAP Client Spider and active DOM-XSS rule `40026`.
-- Runs scans asynchronously through Redis/RQ and publishes progress through a
-  web UI and REST API.
+- Executes scans asynchronously through Redis and RQ and exposes progress
+  through a web UI and REST API.
 
 ## Quick start
 
 Requirements:
 
 - Docker Engine with Docker Compose v2
-- at least 6 GB of available RAM when ZAP is enabled
 - Git and OpenSSL
+- at least 6 GB of available RAM when ZAP is enabled
 
 On Kali Linux:
 
@@ -74,11 +68,7 @@ sudo apt install -y docker.io docker-compose git openssl
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 newgrp docker
-```
 
-Start the application:
-
-```bash
 git clone https://github.com/Layansabha/DOM-XSS.git
 cd DOM-XSS
 cp .env.example .env
@@ -92,46 +82,23 @@ docker compose up --build -d
 curl -fsS http://127.0.0.1:8000/readyz
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Open `http://127.0.0.1:8000`.
 
-The first startup downloads Chromium, ZAP, Redis, application dependencies,
-and pinned model artifacts. Later startups reuse the local images.
-
-## Optional local monitoring
-
-Prometheus, Grafana, and cAdvisor are available as an optional Docker Compose
-override. This monitors local container resources without adding a second
-infrastructure layer.
-
-Set `GRAFANA_ADMIN_PASSWORD` in `.env`, then run:
-
-```bash
-docker compose \
-  -f compose.yaml \
-  -f deploy/compose.observability.yaml \
-  up --build -d
-```
-
-Default endpoints are the application on `127.0.0.1:8000`, Prometheus on
-`127.0.0.1:9090`, and Grafana on `127.0.0.1:3000`.
-
-This is local container monitoring, not a complete observability platform.
-cAdvisor requires privileged read access to Docker and host metadata, so use
-this override only on a trusted development machine.
+The first startup downloads Chromium, Redis, OWASP ZAP 2.17.0, application
+dependencies, and the commit-pinned model artifacts. Later startups reuse local
+images.
 
 ## Using the scanner
 
-Enter a complete HTTP(S) URL and select a scope:
-
-| Mode | Behavior |
+| Mode | Behaviour |
 |---|---|
-| `Auto` | A root URL is treated as a domain scan; a non-root path is treated as one page. |
+| `Auto` | Treats a root URL as a domain scan and a URL with a path as one page. |
 | `Domain crawl` | Follows safe same-origin links within page and depth limits. |
-| `Single page` | Analyzes only the submitted URL. |
+| `Single page` | Analyses only the submitted URL. |
 
 Leave ZAP unchecked for ML-only triage. Enable it only for an authorized target
 when dynamic verification is required; active scanning sends test payloads and
-takes longer.
+can change application state.
 
 The same workflow is available through the API:
 
@@ -145,17 +112,14 @@ curl -sS -X POST http://127.0.0.1:8000/api/scans \
   }'
 ```
 
-The response contains a `status_url` that returns job progress and the final
-result. Interactive API documentation is available at `/docs`.
+The API returns `202 Accepted` with a `status_url`. Interactive API
+documentation is available at `/docs`.
 
-See the [complete user guide](docs/USAGE.md) for configuration,
-troubleshooting, local monitoring, and optional VPS deployment.
-
-## Reading the result correctly
+## Reading results correctly
 
 | Result | Interpretation |
 |---|---|
-| **ML score** | Relative risk ranking for the highest-scoring code unit; not a calibrated exploit probability. |
+| **ML score** | Relative ranking for the highest-scoring code unit, not a calibrated exploit probability. |
 | **High priority** | The score crossed `ML_THRESHOLD` and should be reviewed or dynamically tested. |
 | **Feature coverage** | Share of extracted AST-token occurrences represented in the model vocabulary. |
 | **Insufficient coverage** | No code unit had a meaningful vocabulary match, so no ML decision was made. |
@@ -164,6 +128,126 @@ troubleshooting, local monitoring, and optional VPS deployment.
 
 A low score does not prove the page is safe. A high score without dynamic
 evidence is a triage finding, not a confirmed vulnerability.
+
+## Operational design
+
+The DevOps work in this repository is intentionally focused on operating this
+specific workload rather than adding tools for their own sake.
+
+### Asynchronous execution
+
+Long-running browser and security-analysis work does not execute inside the API
+request. FastAPI validates the request, applies queue-capacity limits, enqueues
+an RQ job, and returns immediately. The worker performs the scan and stores the
+result in Redis.
+
+This keeps the API responsive and makes API health, queue health, and worker
+health independently observable.
+
+### Container design
+
+- multi-stage application image
+- non-root runtime user
+- read-only API and worker filesystems
+- dropped Linux capabilities and `no-new-privileges`
+- service health checks
+- Redis persistence
+- ZAP pinned to version `2.17.0` and an immutable image digest
+- localhost-only API binding by default
+- Redis and ZAP ports not published to the host
+
+### Health and readiness
+
+- `/healthz` verifies that the API process responds.
+- `/readyz` verifies Redis access and model availability.
+- the worker health check verifies Redis connectivity and that the RQ process is
+  running.
+
+A responsive API does not automatically mean that queued scans are being
+processed. Worker health and queue depth are monitored separately.
+
+### Structured logs
+
+API and worker logs are JSON records written to stdout. They include operational
+context such as `request_id`, `job_id`, `stage`, `status`, duration,
+`target_host`, and `error_type`.
+
+The API returns `X-Request-ID`, allowing requests to be correlated with logs.
+
+## Application monitoring
+
+Prometheus and Grafana are available through an optional Compose override:
+
+```bash
+make monitor-up
+```
+
+Default endpoints:
+
+- application: `http://127.0.0.1:8000`
+- Prometheus: `http://127.0.0.1:9090`
+- Grafana: `http://127.0.0.1:3000`
+
+The `/metrics` endpoint exposes:
+
+- HTTP request count and latency
+- Redis metrics availability
+- queue depth
+- registered RQ workers
+- queued, completed, and failed scans
+- pages collected
+- ZAP failures
+- scan-duration count and total
+
+The provisioned **DOM XSS Operations** dashboard shows API p95 latency, queue
+pressure, worker availability, scan outcomes, average scan duration, and
+pipeline activity.
+
+The previous privileged cAdvisor container and generic CPU/RAM dashboard were
+removed. The monitoring layer now measures application behaviour directly.
+
+## CI and end-to-end validation
+
+The GitHub Actions workflow has three validation stages:
+
+1. **Quality:** Ruff, mypy, pytest, and pip-audit.
+2. **Infrastructure:** Terraform formatting, validation, and tests.
+3. **Container:** Compose validation, image build, model smoke test, worker smoke
+   test, end-to-end scan, and Trivy image scanning.
+
+The end-to-end test starts the API, worker, Redis, and a safe local test target,
+submits a real scan, waits for the asynchronous job to finish, validates the
+result, and checks the metrics endpoint. On failure, CI prints service state and
+relevant logs before cleanup.
+
+Run it locally:
+
+```bash
+make e2e
+make e2e-down
+```
+
+## Image versions and deployment
+
+Merges to `main` publish:
+
+- `latest` for convenience
+- `sha-<commit>` for an immutable code revision
+
+Git tags matching `v*` also publish semantic-version tags such as `v1.0.0` and
+`1.0`.
+
+The VPS deployment script rejects `latest` and the local development image. A
+VPS deployment must use a version tag, commit tag, or digest, making rollback
+explicit and repeatable.
+
+The optional [Terraform reference](infra/terraform/README.md) provisions one
+Hetzner Cloud VPS, restricted SSH, HTTP/HTTPS firewall rules, a managed SSH key,
+and cloud-init bootstrap. It defaults to a `demo` environment and requires an
+explicit release tag or commit instead of mutable `main`.
+
+It is a single-server deployment reference, not a highly available platform.
+Applying it creates billable resources.
 
 ## Model and research basis
 
@@ -185,25 +269,12 @@ strict test containing feature bags unseen by training or validation.
 | Runtime triage `0.50` | 0.8431 | 0.7818 | 0.8113 | 0.9066 |
 
 These are function-level results on the cleaned sampled derivative dataset,
-not page-level accuracy on the public web. The runtime uses `0.50` as a
-recall-oriented triage threshold before optional ZAP analysis.
+not page-level accuracy on the public web.
 
 The [model and research audit](docs/MODEL-AND-RESEARCH.md) documents what
-matches the study, what intentionally differs, and what still needs validation
-before making a commercial accuracy claim.
+matches the study, what intentionally differs, and what still needs validation.
 
-## Deployment and security
-
-The default Compose stack binds the application to localhost and does not
-publish Redis or the ZAP API. The optional VPS override adds Caddy, automatic
-HTTPS, and basic authentication for a single-server deployment.
-
-The [optional Terraform reference](infra/terraform/README.md) provisions one
-Hetzner Cloud VPS, a restricted firewall, a managed SSH key, and cloud-init
-bootstrap. Applying it creates billable resources. It is not a highly available
-platform and is not required for local use.
-
-Security controls include:
+## Security controls
 
 - URL normalization, DNS resolution, redirect validation, and browser-request
   checks
@@ -211,24 +282,14 @@ Security controls include:
   by default
 - same-origin crawl boundaries and conservative destructive-link filtering
 - page, depth, byte, queue, and scan-time limits
-- a non-root application container and API request-size limits
+- non-root containers and API request-size limits
 - commit-pinned model artifacts with SHA verification and no pickle
   deserialization
-- CI unit tests, Ruff, mypy, dependency auditing, Terraform tests, Compose
-  validation, and Trivy image scanning
+- dependency auditing, Terraform tests, Compose validation, Trivy scanning, and
+  end-to-end testing in CI
 
 For an authorized local lab, set `ALLOW_PRIVATE_TARGETS=true`. Do not enable
 that setting on a public deployment.
-
-## Repository guides
-
-| Guide | Purpose |
-|---|---|
-| [Use the pipeline](docs/USAGE.md) | Kali setup, scanner usage, diagnostics, monitoring, and VPS deployment. |
-| [How the pipeline works](docs/PIPELINE.md) | Technical flow from URL validation through ZAP evidence. |
-| [Model and research compatibility](docs/MODEL-AND-RESEARCH.md) | Evidence-backed comparison with the CMU study and model limitations. |
-| [Optional VPS infrastructure](infra/terraform/README.md) | Hetzner VPS, firewall, Docker bootstrap, and teardown reference. |
-| [Security policy](SECURITY.md) | Supported versions and responsible vulnerability reporting. |
 
 ## Development
 
@@ -243,28 +304,32 @@ ruff check .
 mypy app
 ```
 
-The same checks are available as `make test`, `make lint`, `make typecheck`,
-and `make audit`. Local monitoring can be started with `make monitor-up` and
-stopped with `make monitor-down`.
-
-Model artifacts are fetched from a commit-pinned source during the image build
-and verified before installation. To prepare them for local development:
+Useful Make targets:
 
 ```bash
-ARTIFACT_DIR=artifacts python3 scripts/prepare_artifacts.py
+make test
+make lint
+make typecheck
+make audit
+make monitor-up
+make monitor-down
+make e2e
+make e2e-down
 ```
 
 ## Current limitations
 
 - Standard Chromium plus Tree-sitter cannot reproduce the study's modified
   Chromium 57/V8 taint instrumentation byte for byte.
-- The current model was trained on a cleaned sample; retraining from the raw
-  CMU `.xz` release remains the preferred dataset revision.
+- The current model was trained on a cleaned sample; retraining from the raw CMU
+  `.xz` release remains the preferred dataset revision.
 - Authenticated crawling and custom interaction scripts are not implemented.
 - Headless-browser blocking and unvisited interaction-dependent paths can
   reduce coverage.
 - Automated ML and ZAP analysis can produce both false positives and false
   negatives.
+- The optional VPS design is a single host and does not provide high
+  availability or autoscaling.
 
 ## License
 

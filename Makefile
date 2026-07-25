@@ -1,7 +1,8 @@
 TF_DIR := infra/terraform
+E2E_COMPOSE := docker compose -f compose.yaml -f deploy/compose.e2e.yaml
 
-.PHONY: up down logs build monitor-up monitor-down test lint typecheck audit \
-	tf-fmt tf-validate tf-test
+.PHONY: up down logs build monitor-up monitor-down e2e e2e-down \
+	test lint typecheck audit tf-fmt tf-validate tf-test
 
 up:
 	docker compose up --build
@@ -20,6 +21,14 @@ monitor-up:
 
 monitor-down:
 	docker compose -f compose.yaml -f deploy/compose.observability.yaml down
+
+e2e:
+	@test -f .env || cp .env.example .env
+	$(E2E_COMPOSE) up --build -d --wait
+	python3 scripts/e2e_smoke.py
+
+e2e-down:
+	$(E2E_COMPOSE) down --volumes --remove-orphans
 
 test:
 	pytest

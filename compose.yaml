@@ -49,12 +49,24 @@ services:
         condition: service_healthy
       zap:
         condition: service_healthy
+    environment:
+      WORKER_NAME: ${WORKER_NAME:-domxss-worker}
     command:
       - /bin/sh
       - -c
-      - exec rq worker "$${QUEUE_NAME}" --url "$${REDIS_URL}" --logging_level INFO
+      - exec rq worker "$${QUEUE_NAME}" --url "$${REDIS_URL}" --name "$${WORKER_NAME}" --logging_level INFO
     shm_size: 1gb
     read_only: true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os; from redis import Redis; Redis.from_url(os.environ['REDIS_URL']).ping(); command=open('/proc/1/cmdline','rb').read().replace(b'\\0', b' '); assert b'rq worker' in command"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   redis:
     image: redis:7.4-alpine
@@ -89,7 +101,7 @@ services:
       - backend
 
   zap:
-    image: ghcr.io/zaproxy/zaproxy:stable
+    image: zaproxy/zap-stable:2.17.0@sha256:8d387b1a63e3425beef4846e39719f5af2a787753af2d8b6558c6257d7a577a2
     command:
       - zap.sh
       - -daemon

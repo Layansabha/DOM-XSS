@@ -12,11 +12,11 @@ variable "project_name" {
 variable "environment" {
   description = "Deployment environment label."
   type        = string
-  default     = "production"
+  default     = "demo"
 
   validation {
-    condition     = contains(["development", "staging", "production"], var.environment)
-    error_message = "environment must be development, staging, or production."
+    condition     = contains(["demo", "development", "staging", "production"], var.environment)
+    error_message = "environment must be demo, development, staging, or production."
   }
 }
 
@@ -80,17 +80,18 @@ variable "repository_url" {
 }
 
 variable "repository_ref" {
-  description = "Branch, tag, or commit checked out during cloud-init."
+  description = "Immutable release tag or commit checked out during cloud-init."
   type        = string
-  default     = "main"
 
   validation {
     condition = (
       can(regex("^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$", var.repository_ref))
       && !strcontains(var.repository_ref, "..")
       && !strcontains(var.repository_ref, "@{")
+      && var.repository_ref != "main"
+      && var.repository_ref != "master"
     )
-    error_message = "repository_ref must be a safe branch, tag, or commit name."
+    error_message = "repository_ref must be a release tag or commit, not a mutable main branch."
   }
 }
 
