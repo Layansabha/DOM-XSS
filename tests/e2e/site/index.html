@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>DOM XSS Pipeline E2E Target</title>
+</head>
+<body>
+  <main>
+    <h1>Authorized local test target</h1>
+    <p id="output">ready</p>
+  </main>
+  <script>
+    function renderFragmentSafely() {
+      const fragment = window.location.hash.slice(1);
+      document.getElementById("output").textContent = fragment || "ready";
+    }
+    window.addEventListener("hashchange", renderFragmentSafely);
+    renderFragmentSafely();
+  </script>
+</body>
+</html>
