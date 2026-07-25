@@ -54,7 +54,7 @@ write_files:
     permissions: "0644"
     content: |
       [Unit]
-      Description=DOM XSS production Compose stack
+      Description=DOM XSS VPS Compose stack
       Requires=docker.service
       After=docker.service network-online.target
       Wants=network-online.target
@@ -64,9 +64,9 @@ write_files:
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=/opt/dom-xss
-      ExecStartPre=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.prod.yaml pull
-      ExecStart=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.prod.yaml up -d --no-build --remove-orphans
-      ExecStop=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.prod.yaml down
+      ExecStartPre=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.vps.yaml pull
+      ExecStart=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.vps.yaml up -d --no-build --remove-orphans
+      ExecStop=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.vps.yaml down
       TimeoutStartSec=900
       TimeoutStopSec=180
 

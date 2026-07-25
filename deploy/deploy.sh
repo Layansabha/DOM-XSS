@@ -16,7 +16,7 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-compose=(docker compose --env-file .env -f compose.yaml -f deploy/compose.prod.yaml)
+compose=(docker compose --env-file .env -f compose.yaml -f deploy/compose.vps.yaml)
 
 "${compose[@]}" pull
 "${compose[@]}" up -d --no-build --remove-orphans

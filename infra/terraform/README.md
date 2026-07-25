@@ -1,31 +1,18 @@
-# Terraform deployments
+# Hetzner VPS Terraform reference
 
-This repository includes two Terraform workflows:
+This directory contains an optional Terraform configuration for a single
+Hetzner Cloud VPS. Running `terraform plan` is free, but `terraform apply`
+creates billable cloud resources.
 
-| Stack | Cost | Purpose |
-|---|---:|---|
-| [`local/`](local/README.md) | Free | Recommended local DevOps deployment using Docker Compose, Prometheus, Grafana, and cAdvisor. |
-| This directory | Paid when applied | Optional Hetzner Cloud reference architecture for a public production VPS. |
-
-For a fully free deployment, use the [`local`](local/README.md) stack. It needs
-only Terraform, Docker, Docker Compose, and OpenSSL on the local Linux machine.
-No cloud account, domain, payment card, or hosted Terraform service is required.
-
-The remaining documentation on this page describes the optional Hetzner Cloud
-stack. Running `terraform plan` is free, but running `terraform apply` in this
-directory creates billable cloud resources.
-
-# Optional Hetzner Cloud deployment
-
-This stack provisions the production host used by the DOM XSS pipeline. It
-creates a Hetzner Cloud server, restricted network firewall, managed SSH key,
-and cloud-init bootstrap for Docker Engine and Docker Compose.
+The stack creates a server, a restricted network firewall, a managed SSH key,
+and a cloud-init bootstrap for Docker Engine and Docker Compose. It is a
+single-server deployment reference, not a highly available platform.
 
 Terraform does **not** deploy application secrets. Values such as
 `ZAP_API_KEY` and the Caddy password hash stay outside Terraform state and are
 copied to the server only after provisioning.
 
-## Provisioned resources
+## Resources
 
 - Ubuntu 24.04 VPS with configurable location and server type
 - IPv4 and optional IPv6

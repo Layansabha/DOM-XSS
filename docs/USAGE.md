@@ -2,7 +2,9 @@
 
 [README](../README.md) · [How it works](PIPELINE.md) · [Model and research](MODEL-AND-RESEARCH.md)
 
-## 1. Start it on Kali Linux
+> Run this project only against systems you own or are explicitly authorized to test.
+
+## Start on Kali Linux
 
 ```bash
 sudo apt update
@@ -14,170 +16,96 @@ newgrp docker
 git clone https://github.com/Layansabha/DOM-XSS.git
 cd DOM-XSS
 cp .env.example .env
-```
-
-Generate a ZAP API key:
-
-```bash
 openssl rand -hex 32
 ```
 
-Open `.env`, set the generated value as `ZAP_API_KEY`, then start the stack:
+Set the generated value as `ZAP_API_KEY` in `.env`, then start the application:
 
 ```bash
 docker compose up --build -d
-docker compose ps
-docker compose logs --tail=100 api worker redis zap
-```
-
-Wait until the application is ready:
-
-```bash
 curl -fsS http://127.0.0.1:8000/readyz
 ```
 
 Open `http://127.0.0.1:8000`.
 
-## 2. Choose the target and scope
+## Scan modes
 
-Enter a complete `http://` or `https://` URL.
+- **Auto:** treats a root URL as a bounded same-origin crawl and a URL with a path as one page.
+- **Domain crawl:** follows safe same-origin links within configured limits.
+- **Single page:** analyzes only the submitted page.
 
-| Scope | Behavior |
-|---|---|
-| `Auto` | A root URL such as `https://example.com/` becomes a domain scan. A URL with a non-root path becomes a single-page scan. |
-| `Domain crawl` | Starts at the submitted URL and follows safe, same-origin links up to `MAX_PAGES` and `MAX_CRAWL_DEPTH`. |
-| `Single page` | Renders and analyzes only the submitted page. |
+Leave dynamic verification disabled for ML-only triage. Enable it only for an
+authorized target. A model score prioritizes review; it does not prove that a
+vulnerability is exploitable.
 
-Subdomains are different origins. A scan of `https://example.com` does not
-automatically include `https://app.example.com`.
+## API
 
-## 3. Choose whether to run ZAP
+Create a scan with `POST /api/scans`, then poll the returned `status_url` until
+the job finishes or fails. Interactive API documentation is available at
+`http://127.0.0.1:8000/docs`.
 
-Leave **Run open-source OWASP ZAP dynamic analysis** unchecked for ML-only
-triage. This is faster and does not send active test payloads.
-
-Check it only for an authorized target. ZAP runs its Client Spider and
-DOM-XSS-focused active rule after the ML stage. Dynamic verification is slower
-and may change application state like any active security scanner.
-
-## 4. Start and read the scan
-
-Select **Start analysis**. The job moves through:
-
-1. `queued`
-2. page collection
-3. ML scoring
-4. optional ZAP verification
-5. `finished` or `failed`
-
-Each page reports:
-
-| Field | Meaning |
-|---|---|
-| Collection status | `Complete`, `Partial scan`, or `Collection failed`. |
-| ML score | Ranking score of the highest-scoring code unit on the page. It is not exploit probability. |
-| High/low priority | Whether the highest score crossed `ML_THRESHOLD`. |
-| Feature coverage | Fraction of extracted AST-token occurrences found in the model vocabulary. |
-| Scored units | Code units with at least one vocabulary match, out of all extracted units. |
-| Top matched features | Vocabulary terms present in the riskiest unit; these are context, not a vulnerability explanation. |
-| Client-side detection | ZAP client-side evidence that still needs reproduction. |
-| Actively confirmed | ZAP active rule `40026` returned reproducible scanner evidence. |
-
-A low score does not prove that a page is safe. A high score is a triage
-candidate until supported by dynamic evidence.
-
-## API usage
-
-Create an ML-only single-page scan:
+## Diagnostics
 
 ```bash
-response="$(
-  curl -fsS -X POST http://127.0.0.1:8000/api/scans \
-    -H 'Content-Type: application/json' \
-    -d '{
-      "target_url": "https://example.com/path",
-      "scope_mode": "page",
-      "dynamic_verification": false
-    }'
-)"
-printf '%s\n' "$response"
+docker compose ps
+docker compose logs --no-color --tail=200 api worker redis zap
+curl -i http://127.0.0.1:8000/healthz
+curl -i http://127.0.0.1:8000/readyz
 ```
 
-The response contains `status_url`. Poll it until `state` becomes `finished`
-or `failed`:
-
-```bash
-curl -fsS http://127.0.0.1:8000/api/scans/JOB_ID
-```
-
-Use `"scope_mode": "domain"` for a domain crawl and set
-`"dynamic_verification": true` for authorized ZAP analysis.
-
-## Stop or reset
-
-Stop the containers without deleting Redis data:
+Stop the stack without deleting Redis data:
 
 ```bash
 docker compose down
 ```
 
-Delete the stack and queued/result data:
+Remove the stack and its local volumes:
 
 ```bash
 docker compose down -v
 ```
 
-## Fast diagnostics
+## Optional local monitoring
+
+Prometheus, Grafana, and cAdvisor are available through a Docker Compose
+override. This provides local container resource monitoring; it is not a full
+observability platform.
+
+Set `GRAFANA_ADMIN_PASSWORD` in `.env`, then run:
 
 ```bash
-docker compose ps
-docker compose logs --no-color --tail=200 api
-docker compose logs --no-color --tail=200 worker
-docker compose logs --no-color --tail=200 redis
-docker compose logs --no-color --tail=200 zap
-curl -i http://127.0.0.1:8000/healthz
-curl -i http://127.0.0.1:8000/readyz
+docker compose \
+  -f compose.yaml \
+  -f deploy/compose.observability.yaml \
+  up --build -d
 ```
 
-The first build is large because it downloads Chromium, OWASP ZAP, Python
-dependencies, Redis, and the pinned model artifacts. Later starts reuse the
-local images and are much faster.
+Default endpoints:
 
-## VPS deployment
+- application: `http://127.0.0.1:8000`
+- Prometheus: `http://127.0.0.1:9090`
+- Grafana: `http://127.0.0.1:3000`
 
-The production override adds Caddy, automatic HTTPS, and HTTP basic
-authentication. The host can be created reproducibly with the
-[Terraform stack](../infra/terraform/README.md), or prepared manually. Before
-deploying:
+cAdvisor requires privileged read access to local Docker and host metadata.
+Use this override only on a trusted development machine.
 
-1. Point the target domain's `A` or `AAAA` record to the VPS.
-2. Allow inbound TCP `80/443` and UDP `443`.
-3. Copy `.env.example` to `.env`.
+## Optional VPS deployment
 
-Generate the required credentials:
+The VPS override adds Caddy, automatic HTTPS, and HTTP basic authentication for
+a single-server deployment. The host can be created with the optional
+[Hetzner Terraform reference](../infra/terraform/README.md), or prepared
+manually.
 
-```bash
-docker run --rm caddy:2.10-alpine \
-  caddy hash-password --plaintext 'choose-a-strong-password'
-openssl rand -hex 32
-```
-
-Set the resulting values in `.env`:
+Before running `./deploy/deploy.sh`, configure these values in `.env`:
 
 ```env
 APP_IMAGE=ghcr.io/layansabha/dom-xss:latest
 APP_DOMAIN=scan.example.com
 APP_BASIC_AUTH_USER=admin
-APP_BASIC_AUTH_HASH='$2a$14$replace_with_the_generated_hash'
-ZAP_API_KEY=replace-with-the-generated-random-value
+APP_BASIC_AUTH_HASH=replace-with-a-caddy-password-hash
+ZAP_API_KEY=replace-with-a-random-value
 ```
 
-Deploy the published image:
-
-```bash
-./deploy/deploy.sh
-```
-
-The script pulls the images, starts the base and production Compose files, and
-waits for the API readiness check. If the GHCR package is not public, first
-authenticate Docker with a GitHub token that has `read:packages`.
+The deployment script pulls the published images, starts the base and VPS
+Compose files, and waits for the API readiness check. Applying the Terraform
+configuration creates billable Hetzner resources.
