@@ -11,9 +11,6 @@ concurrency:
 
 permissions:
   contents: read
-  security-events: write
-  packages: write
-  id-token: write
 
 jobs:
   lint:
@@ -97,12 +94,6 @@ jobs:
 
   terraform:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        stack:
-          - infra/terraform
-          - infra/terraform/local
     steps:
       - uses: actions/checkout@v4
 
@@ -111,20 +102,23 @@ jobs:
           terraform_version: "1.15.8"
 
       - name: Format
-        run: terraform -chdir="${{ matrix.stack }}" fmt -check
+        run: terraform -chdir=infra/terraform fmt -check
 
       - name: Initialize
-        run: terraform -chdir="${{ matrix.stack }}" init -backend=false
+        run: terraform -chdir=infra/terraform init -backend=false
 
       - name: Validate
-        run: terraform -chdir="${{ matrix.stack }}" validate
+        run: terraform -chdir=infra/terraform validate
 
       - name: Test
-        run: terraform -chdir="${{ matrix.stack }}" test
+        run: terraform -chdir=infra/terraform test
 
   container:
     runs-on: ubuntu-24.04
     needs: [lint, typecheck, quality, audit, terraform]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout PR head
         env:
@@ -140,10 +134,8 @@ jobs:
         run: |
           cp .env.example .env
           docker compose config --quiet
-          docker compose -f compose.yaml -f deploy/compose.prod.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose.vps.yaml config --quiet
           docker compose -f compose.yaml -f deploy/compose.observability.yaml config --quiet
-          bash -n infra/terraform/local/scripts/apply.sh
-          bash -n infra/terraform/local/scripts/destroy.sh
           python -m json.tool deploy/monitoring/grafana/dashboards/dom-xss-containers.json >/dev/null
 
       - name: Redis Compose smoke test
@@ -192,6 +184,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     needs: [container]
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -224,5 +219,4 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: mode=max
-          sbom: true
+          provenance: false
