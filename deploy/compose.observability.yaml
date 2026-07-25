@@ -1,30 +1,10 @@
 services:
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.55.1
-    restart: unless-stopped
-    privileged: true
-    command:
-      - --docker_only=true
-      - --housekeeping_interval=15s
-      - --store_container_labels=false
-    devices:
-      - /dev/kmsg:/dev/kmsg
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /dev/disk:/dev/disk:ro
-    networks:
-      - monitoring
-
   prometheus:
-    image: prom/prometheus:v3.12.0
+    image: prom/prometheus:v3.13.1
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=7d
-      - --web.enable-lifecycle
     restart: unless-stopped
     init: true
     read_only: true
@@ -40,7 +20,8 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
     depends_on:
-      - cadvisor
+      api:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/-/ready"]
       interval: 10s
@@ -48,6 +29,7 @@ services:
       retries: 15
       start_period: 10s
     networks:
+      - backend
       - monitoring
 
   grafana:
