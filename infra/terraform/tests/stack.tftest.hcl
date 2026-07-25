@@ -1,16 +1,17 @@
 mock_provider "hcloud" {}
 
-run "production_stack" {
+run "default_vps_stack" {
   command = plan
 
   variables {
     ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBXiDBuwYCWjPsmyiMtCL0zMRppyj4cW/25jr9Hosqom dom-xss-terraform-test"
     admin_cidrs    = ["198.51.100.42/32"]
+    repository_ref = "v1.0.0"
   }
 
   assert {
-    condition     = hcloud_server.app.name == "dom-xss-production"
-    error_message = "The default resource name must identify the application and environment."
+    condition     = hcloud_server.app.name == "dom-xss-demo"
+    error_message = "The default resource name must identify the application and demo environment."
   }
 
   assert {
@@ -40,6 +41,7 @@ run "invalid_admin_network_is_rejected" {
   variables {
     ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBXiDBuwYCWjPsmyiMtCL0zMRppyj4cW/25jr9Hosqom dom-xss-terraform-test"
     admin_cidrs    = ["0.0.0.0/33"]
+    repository_ref = "v1.0.0"
   }
 
   expect_failures = [var.admin_cidrs]
@@ -51,7 +53,20 @@ run "world_open_ssh_is_rejected" {
   variables {
     ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBXiDBuwYCWjPsmyiMtCL0zMRppyj4cW/25jr9Hosqom dom-xss-terraform-test"
     admin_cidrs    = ["0.0.0.0/0"]
+    repository_ref = "v1.0.0"
   }
 
   expect_failures = [var.admin_cidrs]
+}
+
+run "mutable_main_ref_is_rejected" {
+  command = plan
+
+  variables {
+    ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBXiDBuwYCWjPsmyiMtCL0zMRppyj4cW/25jr9Hosqom dom-xss-terraform-test"
+    admin_cidrs    = ["198.51.100.42/32"]
+    repository_ref = "main"
+  }
+
+  expect_failures = [var.repository_ref]
 }
