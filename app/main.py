@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -13,6 +16,8 @@ from redis.exceptions import RedisError
 from rq.job import Job
 
 from app.config import get_settings
+from app.logging_config import configure_logging
+from app.metrics import observe_http_request, record_scan_queued, render_metrics
 from app.queueing import get_queue, get_redis
 from app.schemas import (
     ScanCreated,
@@ -26,11 +31,7 @@ from app.tasks import execute_scan
 
 BASE_DIR = Path(__file__).resolve().parent
 settings = get_settings()
-
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -41,6 +42,13 @@ app = FastAPI(
 )
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+
+def _request_id(request: Request) -> str:
+    supplied = request.headers.get("x-request-id", "").strip()
+    if supplied:
+        return supplied[:100]
+    return str(uuid.uuid4())
 
 
 @app.middleware("http")
@@ -71,6 +79,48 @@ async def security_headers(
     return response
 
 
+@app.middleware("http")
+async def request_observability(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    request_id = _request_id(request)
+    started_at = time.perf_counter()
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    except Exception:
+        logger.exception(
+            "request failed",
+            extra={
+                "request_id": request_id,
+                "status_code": status_code,
+                "target_host": request.url.hostname or "",
+            },
+        )
+        raise
+    finally:
+        duration_seconds = time.perf_counter() - started_at
+        observe_http_request(
+            request.method,
+            request.url.path,
+            status_code,
+            duration_seconds,
+        )
+        logger.info(
+            "request completed",
+            extra={
+                "request_id": request_id,
+                "status_code": status_code,
+                "duration_ms": round(duration_seconds * 1000, 2),
+                "target_host": request.url.hostname or "",
+            },
+        )
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -97,6 +147,12 @@ async def readyz() -> dict[str, str]:
             detail=f"not ready: {type(exc).__name__}",
         ) from exc
     return {"status": "ready"}
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics() -> Response:
+    payload, content_type = render_metrics()
+    return Response(content=payload, headers={"Content-Type": content_type})
 
 
 @app.post(
@@ -129,12 +185,23 @@ async def create_scan(scan_request: ScanRequest, request: Request) -> ScanCreate
             failure_ttl=settings.result_ttl_seconds,
             description=f"DOM XSS scan: {normalized}",
         )
+        record_scan_queued()
     except RedisError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="scan queue is unavailable",
         ) from exc
 
+    logger.info(
+        "scan queued",
+        extra={
+            "request_id": request.headers.get("x-request-id", "")[:100],
+            "job_id": job.id,
+            "target_host": urlsplit(normalized).hostname or "",
+            "scope_mode": scan_request.scope_mode.value,
+            "status": "queued",
+        },
+    )
     return ScanCreated(
         job_id=job.id,
         status_url=str(request.url_for("scan_status", job_id=job.id)),
