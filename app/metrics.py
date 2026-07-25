@@ -76,7 +76,11 @@ class RedisOperationalCollector:
                 "scans_completed",
             ),
             ("dom_xss_scans_failed", "Scans that failed in the worker.", "scans_failed"),
-            ("dom_xss_pages_collected", "Pages collected across completed scans.", "pages_collected"),
+            (
+                "dom_xss_pages_collected",
+                "Pages collected across completed scans.",
+                "pages_collected",
+            ),
             ("dom_xss_zap_failures", "Dynamic-verification runs that failed.", "zap_failures"),
         )
         for name, description, field in counters:
