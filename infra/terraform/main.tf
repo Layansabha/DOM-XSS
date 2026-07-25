@@ -47,14 +47,6 @@ resource "hcloud_firewall" "app" {
 
   rule {
     direction   = "in"
-    protocol    = "udp"
-    port        = "443"
-    source_ips  = ["0.0.0.0/0", "::/0"]
-    description = "HTTP/3 application traffic"
-  }
-
-  rule {
-    direction   = "in"
     protocol    = "icmp"
     source_ips  = ["0.0.0.0/0", "::/0"]
     description = "Network diagnostics and IPv6 neighbor discovery"
