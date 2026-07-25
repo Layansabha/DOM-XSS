@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Histogram, generate_latest
 from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily, SummaryMetricFamily
+from prometheus_client.metrics_core import Metric
 from redis.exceptions import RedisError
 from rq import Worker
 
@@ -38,8 +39,12 @@ def _decode_metric(raw: dict[Any, Any], field: str) -> float:
         return 0.0
 
 
+def _decode_count(raw: dict[Any, Any], field: str) -> int:
+    return int(_decode_metric(raw, field))
+
+
 class RedisOperationalCollector:
-    def collect(self) -> Iterator[object]:
+    def collect(self) -> Iterator[Metric]:
         availability = GaugeMetricFamily(
             "dom_xss_operational_metrics_redis_available",
             "Whether operational metrics can be read from Redis.",
@@ -49,7 +54,7 @@ class RedisOperationalCollector:
 
             redis_client = get_redis()
             redis_client.ping()
-            values = redis_client.hgetall(METRICS_KEY)
+            values = cast(dict[Any, Any], redis_client.hgetall(METRICS_KEY))
             queue_depth = float(get_queue().count)
             worker_count = float(len(Worker.all(connection=redis_client)))
         except (RedisError, OSError, ValueError):
@@ -94,7 +99,7 @@ class RedisOperationalCollector:
         )
         duration.add_metric(
             [],
-            count_value=_decode_metric(values, "scan_duration_count"),
+            count_value=_decode_count(values, "scan_duration_count"),
             sum_value=_decode_metric(values, "scan_duration_sum"),
         )
         yield duration
