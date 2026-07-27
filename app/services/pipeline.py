@@ -21,6 +21,9 @@ async def run_pipeline(
     settings: Settings,
     progress: ProgressCallback,
 ) -> dict[str, object]:
+    if request.dynamic_verification and not settings.zap_enabled:
+        raise RuntimeError("dynamic verification was requested but ZAP is not enabled")
+
     started_at = time.time()
     normalized_target = normalize_url(request.target_url)
     scope_mode = (

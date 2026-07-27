@@ -37,8 +37,9 @@ the server over SSH.
 - an SSH key pair
 - a domain whose DNS records you can update
 
-The default `cpx31` server provides 8 GB RAM. This is appropriate when Chromium
-and OWASP ZAP run together. Review current Hetzner pricing before applying.
+The default `cpx31` server provides 8 GB RAM and supports running Chromium and
+OWASP ZAP together. ML-only deployments do not start ZAP. Review current Hetzner
+pricing before applying.
 
 ## Configure
 
@@ -120,12 +121,19 @@ APP_IMAGE=ghcr.io/layansabha/dom-xss:v1.0.0
 APP_DOMAIN=scan.example.com
 APP_BASIC_AUTH_USER=admin
 APP_BASIC_AUTH_HASH=replace-with-the-generated-caddy-hash
-ZAP_API_KEY=replace-with-the-generated-random-value
+ENABLE_ZAP=false
 ```
 
 The deployment script rejects `latest` and the local development image. Use a
 version tag, commit tag, or digest so that deployment and rollback are
 predictable.
+
+To enable dynamic verification on the VPS, set:
+
+```env
+ENABLE_ZAP=true
+ZAP_API_KEY=replace-with-the-generated-random-value
+```
 
 Copy the runtime file and deploy:
 

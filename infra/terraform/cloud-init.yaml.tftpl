@@ -64,9 +64,8 @@ write_files:
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=/opt/dom-xss
-      ExecStartPre=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.vps.yaml pull
-      ExecStart=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.vps.yaml up -d --no-build --remove-orphans
-      ExecStop=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.vps.yaml down
+      ExecStart=/opt/dom-xss/deploy/deploy.sh
+      ExecStop=/usr/bin/docker compose --env-file .env -f compose.yaml -f deploy/compose.zap.yaml -f deploy/compose.vps.yaml down
       TimeoutStartSec=900
       TimeoutStopSec=180
 

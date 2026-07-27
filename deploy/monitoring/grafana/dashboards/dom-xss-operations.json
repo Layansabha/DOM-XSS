@@ -386,6 +386,6 @@
   "timezone": "browser",
   "title": "DOM XSS Operations",
   "uid": "dom-xss-operations",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

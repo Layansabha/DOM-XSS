@@ -11,24 +11,6 @@ services:
       MAX_PAGES: "2"
       MAX_CRAWL_DEPTH: "1"
 
-  zap:
-    image: python:3.12-alpine
-    command:
-      - python
-      - -m
-      - http.server
-      - "8080"
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080', timeout=3)"
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-
   test-target:
     image: python:3.12-alpine
     command:

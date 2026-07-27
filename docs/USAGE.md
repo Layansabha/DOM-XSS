@@ -8,7 +8,7 @@
 
 ```bash
 sudo apt update
-sudo apt install -y docker.io docker-compose git openssl
+sudo apt install -y docker.io docker-compose git
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 newgrp docker
@@ -16,22 +16,28 @@ newgrp docker
 git clone https://github.com/Layansabha/DOM-XSS.git
 cd DOM-XSS
 cp .env.example .env
-openssl rand -hex 32
 ```
 
-Set the generated value as `ZAP_API_KEY` in `.env`, then start the application:
+Start the default ML-only stack:
 
 ```bash
-docker compose up --build -d
+docker compose up --build -d --remove-orphans
 docker compose ps
 curl -fsS http://127.0.0.1:8000/readyz
 ```
 
 Open `http://127.0.0.1:8000`.
 
-The first startup downloads the application dependencies, Chromium, Redis,
-OWASP ZAP 2.17.0, and the pinned model artifacts. Later starts reuse the local
-images.
+The default stack does not download or run ZAP. For authorized dynamic
+verification, generate an API key, set it as `ZAP_API_KEY` in `.env`, and start
+the optional override:
+
+```bash
+openssl rand -hex 32
+docker compose -f compose.yaml -f deploy/compose.zap.yaml up --build -d --remove-orphans
+```
+
+Later starts reuse the local images.
 
 ## Scan modes
 
@@ -41,9 +47,10 @@ images.
 | `Domain crawl` | Follows safe same-origin links within configured page and depth limits. |
 | `Single page` | Analyses only the submitted page. |
 
-Leave dynamic verification disabled for ML-only triage. Enable it only for an
-authorized target. A model score prioritizes review; it does not prove that a
-vulnerability is exploitable or that a page is safe.
+The dynamic-verification checkbox is disabled in ML-only mode. It becomes
+available when the ZAP override is running. Enable it only for an authorized
+target. A model score prioritizes review; it does not prove that a vulnerability
+is exploitable or that a page is safe.
 
 ## API
 
@@ -91,6 +98,7 @@ Application logs are written as JSON to stdout. Important fields include:
 - `stage`
 - `status`
 - `duration_ms` or `duration_seconds`
+- `request_host`
 - `target_host`
 - `error_type`
 
@@ -130,6 +138,8 @@ Start Prometheus and Grafana:
 make monitor-up
 ```
 
+Use `make monitor-up-zap` when both monitoring and ZAP are required.
+
 Default endpoints:
 
 - application: `http://127.0.0.1:8000`
@@ -140,12 +150,6 @@ The provisioned **DOM XSS Operations** dashboard focuses on application
 behaviour rather than generic container CPU graphs. The monitoring override
 does not require a privileged cAdvisor container.
 
-Stop monitoring without deleting its stored history:
-
-```bash
-make monitor-down
-```
-
 ## End-to-end operational test
 
 The repository includes an isolated local target used only for automated tests.
@@ -155,33 +159,33 @@ the metrics endpoint.
 
 ```bash
 make e2e
-make e2e-down
 ```
 
 The GitHub Actions workflow runs the same type of test after building the
 container image. On failure, it prints service status and the relevant Compose
-logs before cleanup.
+logs before cleanup. The local command also removes its isolated containers and
+volumes when it exits.
 
 ## Diagnostics
 
 ```bash
 docker compose ps
-docker compose logs --no-color --tail=200 api worker redis zap
+docker compose logs --no-color --tail=200 api worker redis
 curl -i http://127.0.0.1:8000/healthz
 curl -i http://127.0.0.1:8000/readyz
 curl -fsS http://127.0.0.1:8000/metrics | head
 ```
 
-Stop the stack without deleting Redis data:
+When the ZAP override is running, inspect it with:
 
 ```bash
-docker compose down
+docker compose -f compose.yaml -f deploy/compose.zap.yaml logs --tail=200 zap
 ```
 
-Remove the stack and local volumes:
+Stop the application and any optional ZAP or monitoring services:
 
 ```bash
-docker compose down -v
+make down
 ```
 
 ## CI and image versions
@@ -214,12 +218,13 @@ APP_IMAGE=ghcr.io/layansabha/dom-xss:v1.0.0
 APP_DOMAIN=scan.example.com
 APP_BASIC_AUTH_USER=admin
 APP_BASIC_AUTH_HASH=replace-with-a-caddy-password-hash
-ZAP_API_KEY=replace-with-a-random-value
+ENABLE_ZAP=false
 ```
 
 The deployment script rejects `latest` and the local development image. It
 pulls the configured version, starts the base and VPS Compose files, and waits
-for `/readyz`.
+for `/readyz`. Set `ENABLE_ZAP=true` and configure `ZAP_API_KEY` only when the
+VPS should provide dynamic verification.
 
 To roll back, set `APP_IMAGE` to the previous release or commit tag and run the
 deployment script again.

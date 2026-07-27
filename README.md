@@ -57,14 +57,14 @@ flowchart LR
 Requirements:
 
 - Docker Engine with Docker Compose v2
-- Git and OpenSSL
+- Git
 - at least 6 GB of available RAM when ZAP is enabled
 
 On Kali Linux:
 
 ```bash
 sudo apt update
-sudo apt install -y docker.io docker-compose git openssl
+sudo apt install -y docker.io docker-compose git
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 newgrp docker
@@ -72,21 +72,30 @@ newgrp docker
 git clone https://github.com/Layansabha/DOM-XSS.git
 cd DOM-XSS
 cp .env.example .env
-openssl rand -hex 32
 ```
 
-Place the generated value in `.env` as `ZAP_API_KEY`, then run:
+Start the default ML-only stack:
 
 ```bash
-docker compose up --build -d
+docker compose up --build -d --remove-orphans
 curl -fsS http://127.0.0.1:8000/readyz
 ```
 
 Open `http://127.0.0.1:8000`.
 
-The first startup downloads Chromium, Redis, OWASP ZAP 2.17.0, application
-dependencies, and the commit-pinned model artifacts. Later startups reuse local
-images.
+This starts the API, worker, Redis, and Chromium-based collection without
+downloading or running ZAP.
+
+For authorized dynamic verification, generate an API key, place it in `.env` as
+`ZAP_API_KEY`, and start the ZAP override:
+
+```bash
+openssl rand -hex 32
+docker compose -f compose.yaml -f deploy/compose.zap.yaml up --build -d --remove-orphans
+```
+
+ZAP is intentionally opt-in because its image and runtime memory are not needed
+for ML-only triage.
 
 ## Using the scanner
 
@@ -96,9 +105,9 @@ images.
 | `Domain crawl` | Follows safe same-origin links within page and depth limits. |
 | `Single page` | Analyses only the submitted URL. |
 
-Leave ZAP unchecked for ML-only triage. Enable it only for an authorized target
-when dynamic verification is required; active scanning sends test payloads and
-can change application state.
+The ZAP checkbox is disabled in the default ML-only deployment. Start the ZAP
+override to make it available, and enable it only for an authorized target;
+active scanning sends test payloads and can change application state.
 
 The same workflow is available through the API:
 
@@ -152,7 +161,7 @@ health independently observable.
 - dropped Linux capabilities and `no-new-privileges`
 - service health checks
 - Redis persistence
-- ZAP pinned to version `2.17.0` and an immutable image digest
+- optional ZAP service pinned to version `2.17.0` and an immutable image digest
 - localhost-only API binding by default
 - Redis and ZAP ports not published to the host
 
@@ -180,6 +189,12 @@ Prometheus and Grafana are available through an optional Compose override:
 
 ```bash
 make monitor-up
+```
+
+To run monitoring together with ZAP:
+
+```bash
+make monitor-up-zap
 ```
 
 Default endpoints:
@@ -224,8 +239,9 @@ Run it locally:
 
 ```bash
 make e2e
-make e2e-down
 ```
+
+The command always removes its isolated containers and volumes when it exits.
 
 ## Image versions and deployment
 
@@ -307,14 +323,16 @@ mypy app
 Useful Make targets:
 
 ```bash
+make up
+make up-zap
+make down
 make test
 make lint
 make typecheck
 make audit
 make monitor-up
-make monitor-down
+make monitor-up-zap
 make e2e
-make e2e-down
 ```
 
 ## Current limitations

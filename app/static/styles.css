@@ -142,6 +142,17 @@ select:focus {
   accent-color: var(--accent);
 }
 
+.check-row small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.check-row:has(input:disabled) {
+  opacity: 0.7;
+}
+
 .warning {
   color: var(--warning);
   margin: 0.8rem 0 0;

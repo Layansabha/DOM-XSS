@@ -127,7 +127,10 @@ async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"ml_threshold": settings.ml_threshold},
+        context={
+            "ml_threshold": settings.ml_threshold,
+            "zap_enabled": settings.zap_enabled,
+        },
     )
 
 
@@ -162,6 +165,15 @@ def metrics() -> Response:
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_scan(scan_request: ScanRequest, request: Request) -> ScanCreated:
+    if scan_request.dynamic_verification and not settings.zap_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "dynamic verification is not enabled; start the application "
+                "with the ZAP Compose override"
+            ),
+        )
+
     try:
         normalized = normalize_url(scan_request.target_url)
     except UnsafeTargetError as exc:

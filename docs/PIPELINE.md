@@ -98,9 +98,11 @@ confirmed vulnerability.
 
 ## 7. Optional dynamic verification
 
-When enabled, OWASP ZAP runs client-side exploration and the DOM-XSS-focused
-active rule `40026` against collected in-scope pages. Client-side detections
-are separated from actively confirmed alerts in both the API and UI.
+When the optional ZAP Compose override is running, the UI allows an authorized
+user to request client-side exploration and the DOM-XSS-focused active rule
+`40026` against collected in-scope pages. The API rejects dynamic-verification
+requests when that service is not enabled. Client-side detections are separated
+from actively confirmed alerts in both the API and UI.
 
 ZAP complements ML; it does not make either stage complete. Authentication,
 rare user interactions, and paths not reached by the crawler can still be

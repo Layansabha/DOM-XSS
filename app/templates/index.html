@@ -48,8 +48,15 @@
         </div>
 
         <label class="check-row">
-          <input id="dynamic-verification" type="checkbox">
-          <span>Run open-source OWASP ZAP dynamic analysis</span>
+          <input
+            id="dynamic-verification"
+            type="checkbox"
+            {% if not zap_enabled %}disabled{% endif %}
+          >
+          <span>
+            Run open-source OWASP ZAP dynamic analysis
+            {% if not zap_enabled %}<small>Not enabled in ML-only mode</small>{% endif %}
+          </span>
         </label>
 
         <p class="warning hidden" id="active-warning">

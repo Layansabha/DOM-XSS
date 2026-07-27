@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     ml_max_code_units: int = Field(default=500, ge=1, le=5000)
     ml_max_code_unit_bytes: int = Field(default=250_000, ge=1_000, le=2_000_000)
 
+    zap_enabled: bool = False
     zap_base_url: str = "http://zap:8080"
     zap_api_key: str = ""
     zap_max_minutes: int = Field(default=10, ge=1, le=60)

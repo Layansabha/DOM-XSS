@@ -1,26 +1,33 @@
 TF_DIR := infra/terraform
+BASE_COMPOSE := docker compose -f compose.yaml
+ZAP_COMPOSE := $(BASE_COMPOSE) -f deploy/compose.zap.yaml
+MONITOR_COMPOSE := $(BASE_COMPOSE) -f deploy/compose.observability.yaml
+MONITOR_ZAP_COMPOSE := $(ZAP_COMPOSE) -f deploy/compose.observability.yaml
 E2E_COMPOSE := docker compose -f compose.yaml -f deploy/compose.e2e.yaml
 
-.PHONY: up down logs build monitor-up monitor-down e2e e2e-down \
+.PHONY: up up-zap down logs build monitor-up monitor-up-zap e2e \
 	test lint typecheck audit tf-fmt tf-validate tf-test
 
 up:
-	docker compose up --build
+	$(BASE_COMPOSE) up --build --remove-orphans
+
+up-zap:
+	$(ZAP_COMPOSE) up --build --remove-orphans
 
 down:
-	docker compose down
+	$(MONITOR_ZAP_COMPOSE) down --remove-orphans
 
 logs:
-	docker compose logs -f --tail=200
+	$(MONITOR_ZAP_COMPOSE) logs -f --tail=200
 
 build:
-	docker compose build --pull
+	$(BASE_COMPOSE) build --pull
 
 monitor-up:
-	docker compose -f compose.yaml -f deploy/compose.observability.yaml up --build -d
+	$(MONITOR_COMPOSE) up --build -d --remove-orphans
 
-monitor-down:
-	docker compose -f compose.yaml -f deploy/compose.observability.yaml down
+monitor-up-zap:
+	$(MONITOR_ZAP_COMPOSE) up --build -d --remove-orphans
 
 e2e:
 	@test -f .env || cp .env.example .env
@@ -29,9 +36,6 @@ e2e:
 		trap cleanup EXIT INT TERM; \
 		$(E2E_COMPOSE) up --build -d --wait; \
 		python3 scripts/e2e_smoke.py
-
-e2e-down:
-	$(E2E_COMPOSE) down --volumes --remove-orphans
 
 test:
 	pytest
