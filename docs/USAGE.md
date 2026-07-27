@@ -34,7 +34,7 @@ the optional override:
 
 ```bash
 openssl rand -hex 32
-docker compose -f compose.yaml -f deploy/compose.zap.yaml up --build -d --remove-orphans
+docker compose -f compose.yaml -f deploy/compose/zap.yaml up --build -d --remove-orphans
 ```
 
 Later starts reuse the local images.
@@ -179,7 +179,7 @@ curl -fsS http://127.0.0.1:8000/metrics | head
 When the ZAP override is running, inspect it with:
 
 ```bash
-docker compose -f compose.yaml -f deploy/compose.zap.yaml logs --tail=200 zap
+docker compose -f compose.yaml -f deploy/compose/zap.yaml logs --tail=200 zap
 ```
 
 Stop the application and any optional ZAP or monitoring services:

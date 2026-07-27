@@ -1,9 +1,9 @@
 TF_DIR := infra/terraform
 BASE_COMPOSE := docker compose -f compose.yaml
-ZAP_COMPOSE := $(BASE_COMPOSE) -f deploy/compose.zap.yaml
-MONITOR_COMPOSE := $(BASE_COMPOSE) -f deploy/compose.observability.yaml
-MONITOR_ZAP_COMPOSE := $(ZAP_COMPOSE) -f deploy/compose.observability.yaml
-E2E_COMPOSE := docker compose -f compose.yaml -f deploy/compose.e2e.yaml
+ZAP_COMPOSE := $(BASE_COMPOSE) -f deploy/compose/zap.yaml
+MONITOR_COMPOSE := $(BASE_COMPOSE) -f deploy/compose/observability.yaml
+MONITOR_ZAP_COMPOSE := $(ZAP_COMPOSE) -f deploy/compose/observability.yaml
+E2E_COMPOSE := docker compose -f compose.yaml -f deploy/compose/e2e.yaml
 
 .PHONY: up up-zap down logs build monitor-up monitor-up-zap e2e \
 	test lint typecheck audit tf-fmt tf-validate tf-test

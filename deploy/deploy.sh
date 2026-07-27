@@ -49,9 +49,9 @@ fi
 
 compose=(docker compose --env-file .env -f compose.yaml)
 if [[ "${enable_zap}" == "true" ]]; then
-  compose+=(-f deploy/compose.zap.yaml)
+  compose+=(-f deploy/compose/zap.yaml)
 fi
-compose+=(-f deploy/compose.vps.yaml)
+compose+=(-f deploy/compose/vps.yaml)
 
 "${compose[@]}" pull
 "${compose[@]}" up -d --no-build --remove-orphans

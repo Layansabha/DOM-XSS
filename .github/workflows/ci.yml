@@ -75,12 +75,12 @@ jobs:
         run: |
           cp .env.example .env
           docker compose config --quiet
-          docker compose -f compose.yaml -f deploy/compose.zap.yaml config --quiet
-          docker compose -f compose.yaml -f deploy/compose.vps.yaml config --quiet
-          docker compose -f compose.yaml -f deploy/compose.zap.yaml -f deploy/compose.vps.yaml config --quiet
-          docker compose -f compose.yaml -f deploy/compose.observability.yaml config --quiet
-          docker compose -f compose.yaml -f deploy/compose.zap.yaml -f deploy/compose.observability.yaml config --quiet
-          docker compose -f compose.yaml -f deploy/compose.e2e.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose/zap.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose/vps.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose/zap.yaml -f deploy/compose/vps.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose/observability.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose/zap.yaml -f deploy/compose/observability.yaml config --quiet
+          docker compose -f compose.yaml -f deploy/compose/e2e.yaml config --quiet
           python -m json.tool deploy/monitoring/grafana/dashboards/dom-xss-operations.json >/dev/null
           python -m compileall -q app scripts/e2e_smoke.py
 
@@ -106,7 +106,7 @@ jobs:
         run: |
           docker compose \
             -f compose.yaml \
-            -f deploy/compose.e2e.yaml \
+            -f deploy/compose/e2e.yaml \
             up -d --no-build --wait
           python scripts/e2e_smoke.py
 
@@ -117,11 +117,11 @@ jobs:
         run: |
           docker compose \
             -f compose.yaml \
-            -f deploy/compose.e2e.yaml \
+            -f deploy/compose/e2e.yaml \
             ps
           docker compose \
             -f compose.yaml \
-            -f deploy/compose.e2e.yaml \
+            -f deploy/compose/e2e.yaml \
             logs --no-color --tail=250 api worker redis test-target
 
       - name: Stop end-to-end environment
@@ -131,7 +131,7 @@ jobs:
         run: |
           docker compose \
             -f compose.yaml \
-            -f deploy/compose.e2e.yaml \
+            -f deploy/compose/e2e.yaml \
             down --volumes --remove-orphans
 
       - name: Generate Trivy security report

@@ -127,7 +127,7 @@ Generate a local API key and store it in `.env`:
 sed -i "s|^ZAP_API_KEY=.*|ZAP_API_KEY=$(openssl rand -hex 32)|" .env
 docker compose \
   -f compose.yaml \
-  -f deploy/compose.zap.yaml \
+  -f deploy/compose/zap.yaml \
   up --build -d --remove-orphans
 ```
 
@@ -181,6 +181,19 @@ is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 Collection warnings such as an HTTP `403`, an invalid script URL, or a browser
 idle timeout mean the scan was partial. They should not be interpreted as a
 clean result.
+
+## Repository layout
+
+| Path | Responsibility |
+|---|---|
+| `app/` | FastAPI application, queue integration, pipeline services, templates, and static assets |
+| `deploy/compose/` | Optional Compose profiles for ZAP, monitoring, VPS, and end-to-end testing |
+| `deploy/caddy/` | Reverse-proxy configuration for the VPS profile |
+| `deploy/monitoring/` | Prometheus and Grafana configuration |
+| `docs/` | Usage, pipeline, and model documentation |
+| `infra/terraform/` | Optional single-VPS Hetzner provisioning |
+| `scripts/` | Build-time artifact preparation and end-to-end test runner |
+| `tests/` | Unit tests and the isolated end-to-end fixture |
 
 ## Operations
 
