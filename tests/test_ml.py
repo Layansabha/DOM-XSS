@@ -55,8 +55,8 @@ def test_model_service_scores_function_units(tmp_path: Path) -> None:
     assert result.code_units_analyzed >= 1
     assert result.code_units_scored >= 1
     assert result.matched_tokens >= 3
-    assert result.probability is not None
-    assert 0 <= result.probability <= 1
+    assert result.risk_score is not None
+    assert 0 <= result.risk_score <= 1
 
 
 def test_model_service_does_not_score_zero_feature_units(tmp_path: Path) -> None:
@@ -83,7 +83,7 @@ def test_model_service_reports_insufficient_coverage_instead_of_baseline(
 
     assert result is not None
     assert result.status == "insufficient_feature_coverage"
-    assert result.probability is None
+    assert result.risk_score is None
     assert result.vulnerable is None
     assert result.code_units_scored == 0
 

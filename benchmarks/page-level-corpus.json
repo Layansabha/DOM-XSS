@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "description": "Small, hand-labeled page-level regression corpus for transparent model diagnostics.",
+  "cases": [
+    {
+      "id": "vulnerable-document-write-hash",
+      "label": "vulnerable",
+      "category": "document.write",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "function render(){document.write(location.hash.slice(1))}",
+      "rationale": "Untrusted fragment data reaches document.write without sanitization."
+    },
+    {
+      "id": "vulnerable-inner-html-hash",
+      "label": "vulnerable",
+      "category": "innerHTML",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "function render(){document.getElementById(\"out\").innerHTML = location.hash.slice(1)}",
+      "rationale": "Untrusted fragment data reaches innerHTML without sanitization."
+    },
+    {
+      "id": "vulnerable-eval-hash",
+      "label": "vulnerable",
+      "category": "eval",
+      "rendered_dom": "<main></main>",
+      "javascript": "function run(){eval(location.hash.slice(1))}",
+      "rationale": "Untrusted fragment data is executed as JavaScript."
+    },
+    {
+      "id": "vulnerable-insert-adjacent-html",
+      "label": "vulnerable",
+      "category": "insertAdjacentHTML",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "function render(){document.querySelector(\"#out\").insertAdjacentHTML(\"beforeend\", location.search)}",
+      "rationale": "Untrusted query data reaches an HTML parsing sink."
+    },
+    {
+      "id": "vulnerable-outer-html",
+      "label": "vulnerable",
+      "category": "outerHTML",
+      "rendered_dom": "<main></main>",
+      "javascript": "function render(){document.body.outerHTML = location.search.slice(1)}",
+      "rationale": "Untrusted query data reaches outerHTML without sanitization."
+    },
+    {
+      "id": "vulnerable-message-inner-html",
+      "label": "vulnerable",
+      "category": "postMessage",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "window.addEventListener(\"message\", event => {document.querySelector(\"#out\").innerHTML = event.data})",
+      "rationale": "Message data reaches innerHTML without origin validation or sanitization."
+    },
+    {
+      "id": "safe-text-content",
+      "label": "safe",
+      "category": "textContent",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "function render(){document.getElementById(\"out\").textContent = location.hash.slice(1)}",
+      "rationale": "Untrusted text is assigned to a text-only DOM sink."
+    },
+    {
+      "id": "safe-static-inner-html",
+      "label": "safe",
+      "category": "constant HTML",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "function render(){document.getElementById(\"out\").innerHTML = \"<strong>Hello</strong>\"}",
+      "rationale": "The HTML sink receives a constant rather than attacker-controlled data."
+    },
+    {
+      "id": "safe-json-parse",
+      "label": "safe",
+      "category": "JSON.parse",
+      "rendered_dom": "<main></main>",
+      "javascript": "function parse(value){return JSON.parse(value)}",
+      "rationale": "The function parses JSON and does not write data to an executable DOM sink."
+    },
+    {
+      "id": "safe-react-text-child",
+      "label": "safe",
+      "category": "React escaped child",
+      "rendered_dom": "<main id=\"root\"></main>",
+      "javascript": "function Search(){return React.createElement(\"p\", null, window.location.search)}",
+      "rationale": "React escapes ordinary text children by default."
+    },
+    {
+      "id": "safe-dompurify-inner-html",
+      "label": "safe",
+      "category": "DOMPurify",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "function render(){document.querySelector(\"#out\").innerHTML = DOMPurify.sanitize(location.hash.slice(1))}",
+      "rationale": "The case assumes the genuine current DOMPurify library and a default sanitization policy."
+    },
+    {
+      "id": "safe-create-text-node",
+      "label": "safe",
+      "category": "createTextNode",
+      "rendered_dom": "<main id=\"out\"></main>",
+      "javascript": "function render(){document.querySelector(\"#out\").append(document.createTextNode(location.hash))}",
+      "rationale": "Untrusted content is converted into a text node before insertion."
+    }
+  ]
+}

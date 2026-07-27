@@ -39,7 +39,7 @@ function renderResults(data) {
     const scored = ml.status === "scored";
     const riskClass = scored ? (ml.vulnerable ? "risk-high" : "risk-low") : "risk-unknown";
     const score = scored
-      ? `ML score ${percentage(ml.probability)}`
+      ? `ML risk score ${percentage(ml.risk_score)}`
       : (ml.status === "insufficient_feature_coverage"
         ? "Insufficient coverage"
         : "Not scored");

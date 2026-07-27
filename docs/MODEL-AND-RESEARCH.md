@@ -70,6 +70,30 @@ The strict test contains 3,169 unique feature bags unseen by training or
 validation, including 55 positives. The runtime keeps `0.50` as the
 recall-oriented triage threshold before optional dynamic analysis.
 
+## Page-level regression report
+
+The repository also ships a deterministic, hand-labeled 12-case page-level
+corpus. It passes complete rendered-DOM and JavaScript inputs through the
+runtime extractor, scores every function, and applies the same maximum-score
+page decision used by the application.
+
+At the runtime threshold of `0.50`, the current model reports:
+
+| Cases | TP | FP | TN | FN | Precision | Recall | F1 | Accuracy |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 12 | 1 | 1 | 5 | 5 | 0.5000 | 0.1667 | 0.2500 | 0.5000 |
+
+These low results are useful evidence, not a release gate to tune around. The
+model recognizes the corpus's direct `document.write` case but misses several
+obvious sink patterns, while the DOMPurify example is a false positive. That
+supports treating the output as a triage score and identifies concrete cases
+for the next retraining cycle.
+
+Run the report with `make benchmark`. The
+[benchmark contract](../benchmarks/README.md) explains why this small,
+synthetic, balanced corpus is a regression suite—not an external estimate of
+real-world accuracy.
+
 ## Required validation before a commercial accuracy claim
 
 1. Obtain the raw CMU `.xz` release instead of Excel-derived samples.

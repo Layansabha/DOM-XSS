@@ -11,6 +11,7 @@ from bs4.element import Tag
 from playwright.async_api import BrowserContext, CDPSession, Page, Route, async_playwright
 
 from app.config import Settings
+from app.redaction import redact_url_query
 from app.services.url_guard import RequestPolicy, UnsafeTargetError, same_origin
 
 _SKIP_PATH_RE = re.compile(
@@ -272,7 +273,8 @@ class BrowserCrawler:
                 )
                 if not response.ok:
                     warnings.append(
-                        f"script fetch returned HTTP {response.status}: {validated_source}"
+                        "script fetch returned "
+                        f"HTTP {response.status}: {redact_url_query(validated_source)}"
                     )
                     continue
                 final_source = await self.policy.validate(response.url)
@@ -492,7 +494,7 @@ class BrowserCrawler:
                                 javascript="",
                                 links_found=0,
                                 scripts_found=0,
-                                warnings=[f"page collection failed: {type(exc).__name__}: {exc}"],
+                                warnings=[f"page collection failed: {type(exc).__name__}"],
                             )
                         )
                         continue

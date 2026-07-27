@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi import HTTPException, Request
 
@@ -23,6 +24,44 @@ def _request() -> Request:
             "headers": [],
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_index_returns_security_headers_and_request_id() -> None:
+    transport = httpx.ASGITransport(app=main.app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+    assert "default-src 'self'" in response.headers["content-security-policy"]
+    assert response.headers["x-request-id"]
+
+
+@pytest.mark.asyncio
+async def test_request_body_limit_is_enforced_before_endpoint_processing() -> None:
+    transport = httpx.ASGITransport(app=main.app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/scans",
+            content=b"",
+            headers={"content-length": "16385"},
+        )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "request body is too large"}
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["x-request-id"]
 
 
 @pytest.mark.asyncio
@@ -64,3 +103,28 @@ async def test_create_scan_rejects_when_queue_is_full(
     assert caught.value.status_code == 429
     assert caught.value.headers == {"Retry-After": "30"}
     assert caught.value.detail == "scan queue is at capacity; try again later"
+
+
+@pytest.mark.asyncio
+async def test_failed_scan_status_does_not_expose_exception_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = SimpleNamespace(
+        id="job-1",
+        result=None,
+        exc_info="RuntimeError: https://example.com/path?token=secret",
+        get_status=lambda refresh: "failed",
+        get_meta=lambda refresh: {},
+    )
+    monkeypatch.setattr(main, "get_redis", lambda: object())
+    monkeypatch.setattr(
+        main.Job,
+        "fetch",
+        staticmethod(lambda job_id, connection: job),
+    )
+
+    response = await main.scan_status("job-1")
+
+    assert response.state == "failed"
+    assert response.error == "scan failed"
+    assert "secret" not in response.error

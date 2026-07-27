@@ -7,6 +7,7 @@ from dataclasses import asdict
 import httpx
 
 from app.config import Settings
+from app.redaction import redact_url_queries
 from app.schemas import ScanRequest
 from app.services.crawler import BrowserCrawler
 from app.services.ml import get_model_service
@@ -80,7 +81,7 @@ async def run_pipeline(
         except (ZapScanError, httpx.HTTPError, OSError, TimeoutError) as exc:
             zap_result = {
                 "status": "failed",
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": redact_url_queries(f"{type(exc).__name__}: {exc}"),
                 "alerts": [],
                 "confirmed_alert_count": 0,
                 "warnings": [],

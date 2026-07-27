@@ -171,7 +171,7 @@ is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
 | Field or status | Meaning |
 |---|---|
-| **ML score** | Highest function-level model score on the page; useful for ranking, not proof of exploitation. |
+| **ML risk score** | Highest function-level model score on the page; useful for ranking, not proof of exploitation. |
 | **High priority** | Score is at or above `ML_THRESHOLD`; review or dynamically test the finding. |
 | **Feature coverage** | Share of extracted token occurrences represented in the model vocabulary. |
 | **Insufficient coverage** | No code unit matched the vocabulary well enough to make an ML decision. |
@@ -190,6 +190,7 @@ clean result.
 | `deploy/compose/` | Optional Compose profiles for ZAP, monitoring, VPS, and end-to-end testing |
 | `deploy/caddy/` | Reverse-proxy configuration for the VPS profile |
 | `deploy/monitoring/` | Prometheus and Grafana configuration |
+| `benchmarks/` | Transparent page-level model regression corpus and its claim boundaries |
 | `docs/` | Usage, pipeline, and model documentation |
 | `infra/terraform/` | Optional single-VPS Hetzner provisioning |
 | `scripts/` | Build-time artifact preparation and end-to-end test runner |
@@ -233,7 +234,7 @@ GitHub Actions validates the repository in three stages:
 |---|---|
 | Quality | Ruff, mypy, pytest, and `pip-audit` |
 | Infrastructure | Terraform formatting, validation, and native tests |
-| Container | Compose profile validation, image build, model and worker smoke tests, an end-to-end scan, and Trivy scanning |
+| Container | Compose profile validation, image build, model regression report, worker smoke test, an end-to-end scan, and Trivy scanning |
 
 The end-to-end test starts an isolated local target and the real API, worker,
 Redis, Chromium, and LightGBM path. It submits a scan, waits for the asynchronous
@@ -255,8 +256,14 @@ playwright install chromium
 make lint
 make typecheck
 make test
+make benchmark
 make audit
 ```
+
+`make benchmark` reports page-level confusion counts and metrics for the
+versioned hand-labeled regression corpus. It is intentionally diagnostic: the
+corpus is synthetic and balanced, so its numbers are not estimates for the
+public web. See [the benchmark contract](benchmarks/README.md).
 
 ## Deployment
 
@@ -324,6 +331,7 @@ commercial accuracy claim.
 | [Usage and operations](docs/USAGE.md) | Setup, scan modes, API, health, logs, metrics, CI, and VPS deployment |
 | [Pipeline internals](docs/PIPELINE.md) | Target policy, crawling, collection, extraction, inference, and verification |
 | [Model and research audit](docs/MODEL-AND-RESEARCH.md) | Research alignment, model contract, evaluation, and claim boundaries |
+| [Page-level regression benchmark](benchmarks/README.md) | Reproducible diagnostic cases, execution, and limits |
 | [Terraform reference](infra/terraform/README.md) | Hetzner inputs, deployment flow, verification, cost, and teardown |
 | [Security policy](SECURITY.md) | Authorized use, private reporting, and deployment guidance |
 

@@ -122,7 +122,8 @@ class ZapClient:
             raise ZapScanError(f"ZAP did not return a context id: {created}")
 
         parsed = urlsplit(target_url)
-        host = re.escape(parsed.hostname or "")
+        hostname = parsed.hostname or ""
+        host = re.escape(f"[{hostname}]" if ":" in hostname else hostname)
         port = parsed.port
         default_port = 443 if parsed.scheme == "https" else 80
         port_expression = f":{port}" if port else rf"(?::{default_port})?"

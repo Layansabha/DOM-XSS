@@ -6,7 +6,7 @@ MONITOR_ZAP_COMPOSE := $(ZAP_COMPOSE) -f deploy/compose/observability.yaml
 E2E_COMPOSE := docker compose -f compose.yaml -f deploy/compose/e2e.yaml
 
 .PHONY: up up-zap down logs build monitor-up monitor-up-zap e2e \
-	test lint typecheck audit tf-fmt tf-validate tf-test
+	test lint typecheck audit benchmark tf-fmt tf-validate tf-test
 
 up:
 	$(BASE_COMPOSE) up --build --remove-orphans
@@ -48,6 +48,13 @@ typecheck:
 
 audit:
 	pip-audit
+
+benchmark:
+	@test -f artifacts/lightgbm_grouped_model.txt || \
+		ARTIFACT_DIR="$(CURDIR)/artifacts" python scripts/prepare_artifacts.py
+	ML_MODEL_PATH="$(CURDIR)/artifacts/lightgbm_grouped_model.txt" \
+		ML_VOCAB_PATH="$(CURDIR)/artifacts/vocab_top500_grouped.json" \
+		python scripts/benchmark_pages.py
 
 tf-fmt:
 	terraform fmt -recursive $(TF_DIR)

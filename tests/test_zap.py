@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import pytest
 
 from app.config import Settings
-from app.services.zap import ZapClient
+from app.services.zap import ZapClient, ZapScanError
 
 
 @pytest.mark.asyncio
@@ -97,3 +98,105 @@ async def test_zap_verifies_only_collected_same_origin_pages(
     assert result.alerts[1]["plugin_id"] == "220000"
     assert result.alerts[1]["confirmed"] is False
     assert result.confirmed_alert_count == 1
+
+
+@pytest.mark.asyncio
+async def test_zap_percentage_wait_reports_timeout() -> None:
+    client = ZapClient(Settings(_env_file=None, zap_api_key="test-key"))
+    try:
+        with pytest.raises(ZapScanError, match="ascan timed out"):
+            await client._wait_for_percentage("ascan", "scan-1", time.monotonic() - 1)
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_zap_context_regex_preserves_ipv6_brackets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = ZapClient(Settings(_env_file=None, zap_api_key="test-key"))
+    calls: list[tuple[str, str, str, dict[str, Any]]] = []
+
+    async def fake_request(
+        component: str,
+        message_type: str,
+        name: str,
+        **params: Any,
+    ) -> dict[str, object]:
+        calls.append((component, message_type, name, params))
+        if (component, name) == ("context", "newContext"):
+            return {"contextId": "7"}
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    try:
+        context_id = await client._create_context(
+            "https://[2606:4700:4700::1111]:8443/path",
+            "ipv6-context",
+        )
+    finally:
+        await client.close()
+
+    include_call = next(
+        params
+        for component, _, name, params in calls
+        if (component, name) == ("context", "includeInContext")
+    )
+    assert context_id == "7"
+    assert include_call["regex"] == (
+        r"^https://\[2606:4700:4700::1111\]:8443/.*$"
+    )
+
+
+@pytest.mark.asyncio
+async def test_zap_continues_active_scan_when_client_spider_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = ZapClient(
+        Settings(
+            _env_file=None,
+            zap_api_key="test-key",
+            max_pages=1,
+            zap_max_minutes=1,
+        )
+    )
+    calls: list[tuple[str, str, str, dict[str, Any]]] = []
+
+    async def fake_request(
+        component: str,
+        message_type: str,
+        name: str,
+        **params: Any,
+    ) -> dict[str, object]:
+        calls.append((component, message_type, name, params))
+        if (component, name) == ("context", "newContext"):
+            return {"contextId": "7"}
+        if (component, name) == ("clientSpider", "scan"):
+            raise ZapScanError("browser failed for https://example.com/?token=secret")
+        if (component, name) == ("core", "accessUrl"):
+            return {"accessUrl": params["url"]}
+        if (component, name) == ("ascan", "scan"):
+            return {"scan": "active-1"}
+        if name == "status":
+            return {"status": "100"}
+        if (component, name) == ("pscan", "recordsToScan"):
+            return {"recordsToScan": "0"}
+        if (component, name) == ("core", "alerts"):
+            return {"alerts": []}
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    try:
+        result = await client.verify("https://example.com/", "page")
+    finally:
+        await client.close()
+
+    active_scans = [
+        params for component, _, name, params in calls if (component, name) == ("ascan", "scan")
+    ]
+    assert len(active_scans) == 1
+    assert result.client_spider_ran is False
+    assert result.warnings == [
+        "Client Spider was unavailable or incomplete; "
+        "active DOM XSS verification continued (ZapScanError)"
+    ]

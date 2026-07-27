@@ -32,7 +32,7 @@ class MatchedFeature(TypedDict):
 @dataclass(frozen=True)
 class Prediction:
     status: str
-    probability: float | None
+    risk_score: float | None
     vulnerable: bool | None
     decision: str
     threshold: float
@@ -118,7 +118,7 @@ class ModelService:
         if not vectors:
             return Prediction(
                 status="insufficient_feature_coverage",
-                probability=None,
+                risk_score=None,
                 vulnerable=None,
                 decision="insufficient_feature_coverage",
                 threshold=self.threshold,
@@ -133,9 +133,9 @@ class ModelService:
             )
 
         features = np.asarray(vectors, dtype=np.float32)
-        probabilities = np.asarray(self.model.predict(features), dtype=np.float64)
-        riskiest_index = int(np.argmax(probabilities))
-        probability = float(probabilities[riskiest_index])
+        risk_scores = np.asarray(self.model.predict(features), dtype=np.float64)
+        riskiest_index = int(np.argmax(risk_scores))
+        risk_score = float(risk_scores[riskiest_index])
         extracted = extracted_units[riskiest_index]
 
         matched: list[MatchedFeature] = []
@@ -148,9 +148,9 @@ class ModelService:
 
         return Prediction(
             status="scored",
-            probability=probability,
-            vulnerable=probability >= self.threshold,
-            decision="high_priority" if probability >= self.threshold else "low_priority",
+            risk_score=risk_score,
+            vulnerable=risk_score >= self.threshold,
+            decision="high_priority" if risk_score >= self.threshold else "low_priority",
             threshold=self.threshold,
             code_units_analyzed=len(units),
             code_units_scored=len(scorable_units),

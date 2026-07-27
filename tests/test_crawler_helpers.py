@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
+from app.config import Settings
 from app.services.crawler import (
+    BrowserCrawler,
     PageArtifact,
     canonicalize_link,
     collection_status_from_warnings,
@@ -9,6 +15,7 @@ from app.services.crawler import (
     script_nodes_from_html,
     summarize_warnings,
 )
+from app.services.url_guard import UnsafeTargetError
 
 
 def test_canonicalize_link_removes_fragment() -> None:
@@ -99,3 +106,29 @@ def test_script_node_merge_prefers_runtime_source_over_url_only_node() -> None:
     assert merged == [
         {"src": "https://example.com/app.js", "text": "function run() {}"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_route_guard_blocks_a_redirect_rejected_by_policy() -> None:
+    class RejectingPolicy:
+        async def validate(self, url: str) -> str:
+            raise UnsafeTargetError("redirect resolved to a private address")
+
+    class RecordingRoute:
+        request = SimpleNamespace(url="https://redirect.example/path?token=secret")
+        aborted_with: str | None = None
+        continued = False
+
+        async def abort(self, reason: str) -> None:
+            self.aborted_with = reason
+
+        async def continue_(self) -> None:
+            self.continued = True
+
+    route = RecordingRoute()
+    crawler = BrowserCrawler(Settings(_env_file=None), RejectingPolicy())  # type: ignore[arg-type]
+
+    await crawler._route_guard(route)  # type: ignore[arg-type]
+
+    assert route.aborted_with == "blockedbyclient"
+    assert route.continued is False

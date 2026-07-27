@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.logging_config import configure_logging
 from app.metrics import observe_http_request, record_scan_queued, render_metrics
 from app.queueing import get_queue, get_redis
+from app.redaction import redact_url_query
 from app.schemas import (
     ScanCreated,
     ScanRequest,
@@ -62,12 +63,12 @@ async def security_headers(
     except ValueError:
         body_size = 16_385
     if body_size > 16_384:
-        return JSONResponse(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        response: Response = JSONResponse(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             content={"detail": "request body is too large"},
         )
-
-    response = await call_next(request)
+    else:
+        response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -196,7 +197,7 @@ async def create_scan(scan_request: ScanRequest, request: Request) -> ScanCreate
             job_timeout=settings.scan_job_timeout_seconds,
             result_ttl=settings.result_ttl_seconds,
             failure_ttl=settings.result_ttl_seconds,
-            description=f"DOM XSS scan: {normalized}",
+            description=f"DOM XSS scan: {redact_url_query(normalized)}",
         )
         record_scan_queued()
     except RedisError as exc:
@@ -253,9 +254,6 @@ async def scan_status(job_id: str) -> ScanStatusResponse:
         result = job.result
     elif state == ScanState.failed:
         error = "scan failed"
-        if job.exc_info:
-            final_line = job.exc_info.strip().splitlines()[-1]
-            error = final_line[:500]
 
     return ScanStatusResponse(
         job_id=job.id,

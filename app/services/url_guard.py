@@ -21,22 +21,33 @@ def normalize_url(raw_url: str) -> str:
     if "://" not in value:
         value = f"https://{value}"
 
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+        parsed_hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise UnsafeTargetError("target URL is malformed") from exc
     if parsed.scheme.lower() not in {"http", "https"}:
         raise UnsafeTargetError("only http and https targets are supported")
-    if not parsed.hostname:
+    if not parsed_hostname:
         raise UnsafeTargetError("target URL must include a hostname")
     if parsed.username or parsed.password:
         raise UnsafeTargetError("credentials in target URLs are not allowed")
 
-    hostname = parsed.hostname.encode("idna").decode("ascii").lower()
-    if hostname in {"localhost", "localhost.localdomain"} or hostname.endswith(".localhost"):
-        raise UnsafeTargetError("localhost targets are blocked")
     try:
-        port = parsed.port
-    except ValueError as exc:
-        raise UnsafeTargetError("target URL has an invalid port") from exc
-    netloc = hostname if port is None else f"{hostname}:{port}"
+        address = ipaddress.ip_address(parsed_hostname)
+    except ValueError:
+        try:
+            hostname = parsed_hostname.encode("idna").decode("ascii").lower()
+        except UnicodeError as exc:
+            raise UnsafeTargetError("target URL has an invalid hostname") from exc
+        if hostname in {"localhost", "localhost.localdomain"} or hostname.endswith(".localhost"):
+            raise UnsafeTargetError("localhost targets are blocked") from None
+        netloc_host = hostname
+    else:
+        hostname = address.compressed.lower()
+        netloc_host = f"[{hostname}]" if isinstance(address, ipaddress.IPv6Address) else hostname
+    netloc = netloc_host if port is None else f"{netloc_host}:{port}"
 
     path = parsed.path or "/"
     normalized = SplitResult(
