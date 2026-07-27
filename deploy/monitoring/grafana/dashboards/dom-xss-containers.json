@@ -178,7 +178,7 @@
           "refId": "A"
         }
       ],
-      "title": "Active workers",
+      "title": "Registered workers",
       "type": "stat"
     },
     {

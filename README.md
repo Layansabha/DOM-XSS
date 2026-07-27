@@ -170,7 +170,7 @@ processed. Worker health and queue depth are monitored separately.
 
 API and worker logs are JSON records written to stdout. They include operational
 context such as `request_id`, `job_id`, `stage`, `status`, duration,
-`target_host`, and `error_type`.
+`request_host`, `target_host`, and `error_type`.
 
 The API returns `X-Request-ID`, allowing requests to be correlated with logs.
 

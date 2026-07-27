@@ -99,7 +99,7 @@ async def request_observability(
             extra={
                 "request_id": request_id,
                 "status_code": status_code,
-                "target_host": request.url.hostname or "",
+                "request_host": request.url.hostname or "",
             },
         )
         raise
@@ -117,7 +117,7 @@ async def request_observability(
                 "request_id": request_id,
                 "status_code": status_code,
                 "duration_ms": round(duration_seconds * 1000, 2),
-                "target_host": request.url.hostname or "",
+                "request_host": request.url.hostname or "",
             },
         )
 
@@ -151,7 +151,7 @@ async def readyz() -> dict[str, str]:
 
 
 @app.get("/metrics", include_in_schema=False)
-async def metrics() -> Response:
+def metrics() -> Response:
     payload, content_type = render_metrics()
     return Response(content=payload, headers={"Content-Type": content_type})
 

@@ -24,8 +24,11 @@ monitor-down:
 
 e2e:
 	@test -f .env || cp .env.example .env
-	$(E2E_COMPOSE) up --build -d --wait
-	python3 scripts/e2e_smoke.py
+	@set -eu; \
+		cleanup() { $(E2E_COMPOSE) down --volumes --remove-orphans; }; \
+		trap cleanup EXIT INT TERM; \
+		$(E2E_COMPOSE) up --build -d --wait; \
+		python3 scripts/e2e_smoke.py
 
 e2e-down:
 	$(E2E_COMPOSE) down --volumes --remove-orphans

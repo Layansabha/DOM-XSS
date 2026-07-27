@@ -13,6 +13,7 @@ _CONTEXT_FIELDS = (
     "status_code",
     "duration_ms",
     "duration_seconds",
+    "request_host",
     "target_host",
     "scope_mode",
     "error_type",
