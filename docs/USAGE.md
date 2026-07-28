@@ -217,6 +217,30 @@ Default endpoints:
 - Prometheus: `http://127.0.0.1:9090`
 - Grafana: `http://127.0.0.1:3000`
 
+Sign in to local Grafana with username `admin` and password `admin`. This
+convenient default is safe only while the published port remains bound to
+`127.0.0.1`; set a strong `GRAFANA_ADMIN_PASSWORD` before any remote exposure.
+The provisioned dashboard is available at
+**Dashboards → DOM XSS Operations**.
+
+Prometheus intentionally opens on its query screen with no query selected. It
+is the metrics database and query UI, while Grafana is the prepared visual
+interface. In Prometheus:
+
+1. Open **Status → Target health** and verify `dom-xss-api` is `UP`.
+2. Return to **Query** and enter `up{job="dom-xss-api"}`.
+3. Select **Execute**; a value of `1` means the application metrics endpoint is
+   being scraped successfully.
+
+Useful application queries include:
+
+```promql
+dom_xss_queue_depth
+dom_xss_scans_completed_total
+dom_xss_pages_collected_total
+rate(dom_xss_http_requests_total[5m])
+```
+
 The provisioned **DOM XSS Operations** dashboard focuses on application
 behaviour rather than generic container CPU graphs. The monitoring override
 does not require a privileged cAdvisor container.

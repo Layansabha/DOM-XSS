@@ -24,10 +24,10 @@ build:
 	$(BASE_COMPOSE) build --pull
 
 monitor-up:
-	$(MONITOR_COMPOSE) up --build -d --remove-orphans
+	$(MONITOR_COMPOSE) up -d --remove-orphans
 
 monitor-up-zap:
-	$(MONITOR_ZAP_COMPOSE) up --build -d --remove-orphans
+	$(MONITOR_ZAP_COMPOSE) up -d --remove-orphans
 
 e2e:
 	@test -f .env || cp .env.example .env

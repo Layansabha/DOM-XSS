@@ -323,6 +323,16 @@ Important local endpoints:
 | `http://127.0.0.1:9090` | Prometheus when monitoring is enabled |
 | `http://127.0.0.1:3000` | Grafana when monitoring is enabled |
 
+The local Grafana login is `admin` / `admin`. Grafana may ask you to change the
+password after the first login. Set `GRAFANA_ADMIN_PASSWORD` to a strong secret
+before exposing the monitoring stack beyond localhost.
+
+Prometheus is a query interface and therefore opens with an empty expression
+box; the ready-to-use visual dashboard is in Grafana under
+**Dashboards → DOM XSS Operations**. To verify collection directly in
+Prometheus, open **Status → Target health** and confirm that `dom-xss-api` is
+`UP`, or run the `up{job="dom-xss-api"}` query.
+
 Operational logs are JSON records written to stdout:
 
 ```bash
