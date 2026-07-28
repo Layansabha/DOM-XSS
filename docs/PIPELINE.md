@@ -9,8 +9,8 @@ flowchart TD
     C --> D[Chromium page execution]
     D --> E[JavaScript collection]
     E --> F[Function-sized code units]
-    F --> G[AST token-frequency vectors]
-    G --> H[LightGBM risk ranking]
+    F --> G[AST and security-interaction vectors]
+    G --> H[LightGBM and static triage]
     H --> I{Dynamic verification enabled?}
     I -- No --> J[ML triage result]
     I -- Yes --> K[OWASP ZAP client and active analysis]
@@ -77,7 +77,13 @@ The extractor counts normalized:
 - function calls and assignments
 - JavaScript operators
 
-Only terms present in the pinned 500-token training vocabulary enter the
+The extractor then adds deterministic indicators for recognized untrusted
+sources, dangerous sinks, and their co-occurrence within the same code unit.
+Examples include URL data with `innerHTML`, storage data with `eval`, and
+message data with `document.write`. These are syntactic co-occurrences, not
+taint-flow proof.
+
+Only terms present in the pinned 4,096-feature train-only vocabulary enter the
 vector. The vocabulary index is the model feature index, so vector order is
 stable and checked against `Booster.num_feature()` at startup.
 
@@ -90,11 +96,18 @@ source-code evidence.
 LightGBM scores each scorable unit independently. The page result uses the
 maximum unit score because the model was trained at function level, not page
 level. The output also contains coverage, unit counts, the riskiest unit type,
-and matched terms.
+matched terms, and any source/sink signals.
 
-`ML_THRESHOLD` turns the continuous rank into `high_priority` or
-`low_priority`. It does not turn the score into a calibrated probability or a
-confirmed vulnerability.
+The runtime exposes two related decisions:
+
+- `model_high_priority` means the learned score crossed `ML_THRESHOLD`.
+- `high_priority` means the model crossed the threshold, a recognized
+  source/sink pair occurred in one code unit, or both.
+
+`decision_basis` states which path raised the priority. The second path improves
+recall on obvious patterns the learned score can miss, but it is a static rule
+and may flag sanitized code. Neither decision turns the score into a calibrated
+probability or a confirmed vulnerability.
 
 ## 7. Optional dynamic verification
 
@@ -114,7 +127,8 @@ The pipeline has three evidence levels:
 
 | Level | Meaning |
 |---|---|
-| ML low/high priority | Static function-level ranking from learned AST-token patterns. |
+| Model low/high priority | Static function-level ranking from learned AST-token and interaction patterns. |
+| Source/sink priority | Syntactic co-occurrence that requires analyst flow and sanitizer review. |
 | ZAP client-side detection | Dynamic browser-side evidence requiring analyst reproduction. |
 | ZAP actively confirmed | Active scanner evidence from DOM-XSS rule `40026`. |
 

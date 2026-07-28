@@ -1,0 +1,172 @@
+{
+  "artifact_version": 3,
+  "dataset": {
+    "audit": {
+      "input_files": [
+        {
+          "path": "positive_rows.xlsx",
+          "sha256": "63aba628a3528c80d04ac733b92cf6a33436d216ee2e453828a8b44b85fbffe0",
+          "size": 101543112
+        },
+        {
+          "path": "negative_rows.xlsx",
+          "sha256": "d5a5a6cf40fdfa57bc1a6c48f245d70e303810aa35df60b0c343bcd6a8c5a1cc",
+          "size": 8124045
+        }
+      ],
+      "label_counts": {
+        "n": 49952,
+        "p": 37258
+      },
+      "parsed_rows": 87210,
+      "rejected_rows": {
+        "excel_cell_limit": 3290
+      },
+      "split_counts": {
+        "test": 9989,
+        "train": 66749,
+        "validation": 10472
+      },
+      "unique_scripts": 22886,
+      "zero_vocabulary_coverage_rows": 4542
+    },
+    "name": "DOM XSS Web Vulnerability Dataset",
+    "paper": "https://www.contrib.andrew.cmu.edu/~liminjia/research/papers/www2021-dom-xss-dnn.pdf",
+    "url": "https://kilthub.cmu.edu/articles/dataset/DOM_XSS_Web_Vulnerability_Dataset/13870256"
+  },
+  "evaluation": {
+    "deployment_test_at_0_5": {
+      "confusion": {
+        "fn": 9,
+        "fp": 8,
+        "tn": 3151,
+        "tp": 47
+      },
+      "f1": 0.8468468468468469,
+      "positive_rows": 56,
+      "pr_auc": 0.9160782124424889,
+      "precision": 0.8545454545454545,
+      "recall": 0.8392857142857143,
+      "roc_auc": 0.9966705105593995,
+      "rows": 3215,
+      "threshold": 0.5
+    },
+    "deployment_test_hybrid_at_0_5": {
+      "combined_positive_rows": 68,
+      "confusion": {
+        "fn": 7,
+        "fp": 19,
+        "tn": 3140,
+        "tp": 49
+      },
+      "f1": 0.7903225806451613,
+      "model_positive_rows": 55,
+      "positive_rows": 56,
+      "precision": 0.7205882352941176,
+      "recall": 0.875,
+      "rows": 3215,
+      "security_signal_rows": 59,
+      "threshold": 0.5
+    },
+    "protocol": "Deterministic script-level split; train-only vocabulary; invalid, zero-coverage and conflicting-label feature bags excluded; training duplicates capped at 20 rows per feature bag; validation and test are unique and unseen by earlier splits; deployment threshold targets 95.0% validation recall.",
+    "test": {
+      "confusion": {
+        "fn": 5,
+        "fp": 34,
+        "tn": 3125,
+        "tp": 51
+      },
+      "f1": 0.723404255319149,
+      "positive_rows": 56,
+      "pr_auc": 0.9130280577583368,
+      "precision": 0.6,
+      "recall": 0.9107142857142857,
+      "roc_auc": 0.9960543571654683,
+      "rows": 3215,
+      "threshold": 0.022059332583599253
+    },
+    "test_at_0_5": {
+      "confusion": {
+        "fn": 10,
+        "fp": 8,
+        "tn": 3151,
+        "tp": 46
+      },
+      "f1": 0.8363636363636363,
+      "positive_rows": 56,
+      "pr_auc": 0.9130280577583368,
+      "precision": 0.8518518518518519,
+      "recall": 0.8214285714285714,
+      "roc_auc": 0.9960543571654683,
+      "rows": 3215,
+      "threshold": 0.5
+    },
+    "test_hybrid": {
+      "combined_positive_rows": 91,
+      "confusion": {
+        "fn": 5,
+        "fp": 40,
+        "tn": 3119,
+        "tp": 51
+      },
+      "f1": 0.6938775510204082,
+      "model_positive_rows": 85,
+      "positive_rows": 56,
+      "precision": 0.5604395604395604,
+      "recall": 0.9107142857142857,
+      "rows": 3215,
+      "security_signal_rows": 59,
+      "threshold": 0.022059332583599253
+    },
+    "test_hybrid_at_0_5": {
+      "combined_positive_rows": 69,
+      "confusion": {
+        "fn": 6,
+        "fp": 19,
+        "tn": 3140,
+        "tp": 50
+      },
+      "f1": 0.8,
+      "model_positive_rows": 54,
+      "positive_rows": 56,
+      "precision": 0.7246376811594203,
+      "recall": 0.8928571428571429,
+      "rows": 3215,
+      "security_signal_rows": 59,
+      "threshold": 0.5
+    }
+  },
+  "feature_contract": "cmu-ast-bow-security-interactions-v2",
+  "feature_representation": "normalized AST token counts plus deterministic source/sink co-occurrence features, top-4096 train-only vocabulary",
+  "limitations": [
+    "This LightGBM derivative is not the paper's TensorFlow DNN and does not reproduce the paper's full 32-million-function experiment.",
+    "When legacy XLSX inputs are used, rows at Excel's 32,767-character cell limit are rejected because their feature dictionaries are truncated.",
+    "Scores rank candidates and are not calibrated probabilities of exploitability."
+  ],
+  "model_family": "LightGBM",
+  "model_name": "DOM-XSS LightGBM Security v2",
+  "output_semantics": "risk_score_not_calibrated_probability",
+  "split_contract": "deterministic 80/10/10 assignment by dbg script identifier",
+  "training": {
+    "deployment_training_positive_rows": 6074,
+    "deployment_training_rows_capped": 44507,
+    "maximum_rows_per_training_feature_bag": 20,
+    "parameters": {
+      "class_weight": "balanced",
+      "colsample_bytree": 0.8,
+      "learning_rate": 0.05,
+      "max_depth": 12,
+      "min_child_samples": 50,
+      "n_estimators": 460,
+      "n_jobs": -1,
+      "num_leaves": 64,
+      "objective": "binary",
+      "random_state": 42,
+      "reg_alpha": 0.1,
+      "reg_lambda": 1.0,
+      "subsample": 0.8,
+      "verbosity": -1
+    },
+    "validation_selected_threshold": 0.022059332583599253
+  }
+}

@@ -53,8 +53,8 @@ artifacts:
 	python scripts/verify_artifacts.py --artifact-dir artifacts
 
 benchmark: artifacts
-	ML_MODEL_PATH="$(CURDIR)/artifacts/lightgbm_grouped_model.txt" \
-		ML_VOCAB_PATH="$(CURDIR)/artifacts/vocab_top500_grouped.json" \
+	ML_MODEL_PATH="$(CURDIR)/artifacts/lightgbm_security_v2.txt" \
+		ML_VOCAB_PATH="$(CURDIR)/artifacts/vocab_security_v2.json" \
 		python scripts/benchmark_pages.py
 
 tf-fmt:

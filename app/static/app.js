@@ -57,6 +57,16 @@ function renderResults(data) {
     const decision = scored
       ? (ml.vulnerable ? "HIGH PRIORITY" : "LOW PRIORITY")
       : "NO ML DECISION";
+    const decisionBasis = {
+      model: "Model score",
+      security_signal: "Source/sink signal",
+      model_and_security_signal: "Model + source/sink signal",
+      none: "No high-priority signal",
+    }[ml.decision_basis] || "";
+    const securitySignals = (ml.security_signals || [])
+      .slice(0, 6)
+      .map((signal) => `<span>${escapeHtml(signal.replaceAll("_", " → "))}</span>`)
+      .join("");
     const collectionStatus = page.collection_status || "complete";
     const collectionBadge = collectionStatus === "partial"
       ? '<span class="collection-pill collection-partial">PARTIAL</span>'
@@ -85,6 +95,8 @@ function renderResults(data) {
           <div><dt>Feature coverage</dt><dd>${percentage(ml.feature_coverage ?? 0)}</dd></div>
           <div><dt>Scored units</dt><dd>${ml.code_units_scored ?? 0}/${ml.code_units_analyzed ?? 0}</dd></div>
         </dl>
+        ${decisionBasis ? `<p class="note">Decision basis: ${escapeHtml(decisionBasis)}</p>` : ""}
+        ${securitySignals ? `<div class="features">${securitySignals}</div>` : ""}
         ${features ? `<div class="features">${features}</div>` : ""}
         ${ml.reason ? `<p class="note">${escapeHtml(ml.reason)}</p>` : ""}
         ${(page.warnings || []).map((warning) => `<p class="note">${escapeHtml(warning)}</p>`).join("")}
@@ -118,7 +130,7 @@ function renderResults(data) {
     <div class="summary-grid">
       <div><strong>${summary.pages_collected}</strong><span>Pages collected</span></div>
       <div><strong>${summary.pages_scored}</strong><span>Pages scored</span></div>
-      <div><strong>${summary.ml_high_risk_pages}</strong><span>High-priority pages</span></div>
+      <div><strong>${summary.high_priority_pages ?? summary.ml_high_risk_pages}</strong><span>High-priority pages</span></div>
       <div><strong>${summary.zap_dom_xss_findings ?? 0}</strong><span>ZAP findings / ${summary.verified_dom_xss_alerts ?? 0} confirmed</span></div>
     </div>
     <div class="section-heading">

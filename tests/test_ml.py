@@ -57,6 +57,9 @@ def test_model_service_scores_function_units(tmp_path: Path) -> None:
     assert result.matched_tokens >= 3
     assert result.risk_score is not None
     assert 0 <= result.risk_score <= 1
+    assert result.vulnerable is True
+    assert result.decision_basis in {"security_signal", "model_and_security_signal"}
+    assert "url_document_write" in result.security_signals
 
 
 def test_model_service_does_not_score_zero_feature_units(tmp_path: Path) -> None:
@@ -73,6 +76,22 @@ def test_model_service_does_not_score_zero_feature_units(tmp_path: Path) -> None
     assert result.matched_tokens >= 3
 
 
+def test_security_signal_does_not_cross_code_unit_boundaries(tmp_path: Path) -> None:
+    model_path, vocab_path = _write_artifacts(tmp_path)
+    service = ModelService(model_path, vocab_path, 1.0, 20, 20_000)
+
+    result = service.predict(
+        "",
+        "function source(){return location.hash} function sink(){document.write('safe')}",
+    )
+
+    assert result is not None
+    assert result.status == "scored"
+    assert result.security_signals == []
+    assert result.decision_basis == "none"
+    assert result.vulnerable is False
+
+
 def test_model_service_reports_insufficient_coverage_instead_of_baseline(
     tmp_path: Path,
 ) -> None:
@@ -85,6 +104,7 @@ def test_model_service_reports_insufficient_coverage_instead_of_baseline(
     assert result.status == "insufficient_feature_coverage"
     assert result.risk_score is None
     assert result.vulnerable is None
+    assert result.model_high_priority is None
     assert result.code_units_scored == 0
 
 

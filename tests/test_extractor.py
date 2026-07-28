@@ -25,6 +25,19 @@ def test_ast_tokens_include_symbols_operations_and_properties() -> None:
     assert counts["document"] >= 1
     assert counts["innerhtml"] >= 1
     assert counts["location"] >= 1
+    assert counts["sec_source_url"] == 1
+    assert counts["sec_sink_inner_html"] == 1
+    assert counts["sec_pair_url_inner_html"] == 1
+
+
+def test_ast_tokens_do_not_invent_a_source_sink_pair() -> None:
+    counts = ast_token_counts(
+        "function render(value) { output.textContent = location.hash + value; }"
+    )
+
+    assert counts["sec_source_url"] == 1
+    assert not any(token.startswith("sec_sink_") for token in counts)
+    assert not any(token.startswith("sec_pair_") for token in counts)
 
 
 def test_extract_code_units_finds_functions_and_dom_handlers() -> None:

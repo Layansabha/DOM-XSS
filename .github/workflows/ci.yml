@@ -96,7 +96,7 @@ jobs:
       - name: Model artifact smoke test
         run: |
           docker run --rm dom-xss-pipeline:${{ github.sha }} \
-            python -c "import importlib.util; from app.services.ml import get_model_service; service=get_model_service(); result=service.predict('', 'function sink(){document.write(location.hash)}'); zero=service.predict('', 'quuxxyz;'); assert len(service.vocabulary)==500; assert type(service.model).__name__=='Booster'; assert result is not None and result.status=='scored' and result.risk_score is not None and result.risk_score>0.9; assert zero is not None and zero.status=='insufficient_feature_coverage' and zero.risk_score is None; assert importlib.util.find_spec('sklearn') is None; assert importlib.util.find_spec('joblib') is None; print(type(service.model).__name__, result.risk_score, zero.status)"
+            python -c "import importlib.util; from app.services.ml import get_model_service; service=get_model_service(); result=service.predict('', 'function sink(){document.write(location.hash)}'); zero=service.predict('', 'quuxxyz;'); assert len(service.vocabulary)==4096; assert type(service.model).__name__=='Booster'; assert result is not None and result.status=='scored' and result.risk_score is not None and result.risk_score>0.9 and result.vulnerable; assert result.security_signals==['url_document_write']; assert zero is not None and zero.status=='insufficient_feature_coverage' and zero.risk_score is None; assert importlib.util.find_spec('sklearn') is None; assert importlib.util.find_spec('joblib') is None; print(type(service.model).__name__, result.risk_score, result.decision_basis, zero.status)"
 
       - name: Page-level model regression report
         run: |

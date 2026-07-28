@@ -15,9 +15,9 @@ build/
 # are reproducible and do not depend on GitHub being reachable.
 artifacts/*
 !artifacts/artifact-manifest.json
-!artifacts/lightgbm_grouped_metadata.json
-!artifacts/lightgbm_grouped_model.txt
-!artifacts/vocab_top500_grouped.json
+!artifacts/lightgbm_security_v2_metadata.json
+!artifacts/lightgbm_security_v2.txt
+!artifacts/vocab_security_v2.json
 scan-results/
 .DS_Store
 .idea/

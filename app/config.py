@@ -6,10 +6,12 @@ from pathlib import Path
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-CURRENT_MODEL_PATH = Path("/app/artifacts/lightgbm_grouped_model.txt")
-CURRENT_VOCAB_PATH = Path("/app/artifacts/vocab_top500_grouped.json")
+CURRENT_MODEL_PATH = Path("/app/artifacts/lightgbm_security_v2.txt")
+CURRENT_VOCAB_PATH = Path("/app/artifacts/vocab_security_v2.json")
 LEGACY_MODEL_PATH = Path("/app/artifacts/lightgbm_model.txt")
 LEGACY_VOCAB_PATH = Path("/app/artifacts/vocab_top500_filtered.json")
+GROUPED_MODEL_PATH = Path("/app/artifacts/lightgbm_grouped_model.txt")
+GROUPED_VOCAB_PATH = Path("/app/artifacts/vocab_top500_grouped.json")
 
 
 class Settings(BaseSettings):
@@ -53,10 +55,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def migrate_legacy_artifact_paths(self) -> Settings:
-        """Keep existing .env files working after the grouped-model upgrade."""
-        if self.ml_model_path == LEGACY_MODEL_PATH:
+        """Keep existing .env files working after model-bundle upgrades."""
+        if self.ml_model_path in {LEGACY_MODEL_PATH, GROUPED_MODEL_PATH}:
             self.ml_model_path = CURRENT_MODEL_PATH
-        if self.ml_vocab_path == LEGACY_VOCAB_PATH:
+        if self.ml_vocab_path in {LEGACY_VOCAB_PATH, GROUPED_VOCAB_PATH}:
             self.ml_vocab_path = CURRENT_VOCAB_PATH
         return self
 

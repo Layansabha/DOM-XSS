@@ -8,6 +8,8 @@ import tree_sitter_javascript
 from bs4 import BeautifulSoup
 from tree_sitter import Language, Node, Parser
 
+from app.services.security_features import augment_security_features
+
 _LANGUAGE = Language(tree_sitter_javascript.language())
 _FUNCTION_NODES = {
     "arrow_function",
@@ -175,7 +177,7 @@ def ast_token_counts(source_code: str) -> Counter[str]:
                 if name := _OPERATOR_NAMES.get(operator):
                     counts[name] += 1
 
-    return counts
+    return augment_security_features(counts)
 
 
 def _inline_handler_units(rendered_dom: str) -> list[CodeUnit]:

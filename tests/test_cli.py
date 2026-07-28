@@ -33,6 +33,7 @@ def test_result_renderer_prints_compact_security_summary(capsys: object) -> None
         "summary": {
             "pages_collected": 1,
             "pages_scored": 1,
+            "high_priority_pages": 1,
             "ml_high_risk_pages": 1,
             "verified_dom_xss_alerts": 0,
         },
@@ -55,7 +56,7 @@ def test_result_renderer_prints_compact_security_summary(capsys: object) -> None
     output = capsys.readouterr().out  # type: ignore[attr-defined]
 
     assert "ANALYSIS COMPLETE" in output
-    assert "high-risk 1" in output
+    assert "high-priority 1" in output
     assert "96.7%" in output
     assert "84.1%" in output
     assert "https://example.com/vulnerable" in output

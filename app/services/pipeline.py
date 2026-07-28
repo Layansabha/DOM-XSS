@@ -11,6 +11,7 @@ from app.redaction import redact_url_queries
 from app.schemas import ScanRequest
 from app.services.crawler import BrowserCrawler
 from app.services.ml import get_model_service
+from app.services.security_features import FEATURE_CONTRACT
 from app.services.url_guard import RequestPolicy, infer_scope_mode, normalize_url
 from app.services.zap import ZapClient, ZapScanError
 
@@ -91,14 +92,17 @@ async def run_pipeline(
 
     progress(95, "finalizing")
     scored_pages: list[dict[str, object]] = []
-    high_risk_page_count = 0
+    high_priority_page_count = 0
+    model_high_risk_page_count = 0
     for page in pages:
         ml_result = page.get("ml")
         if not isinstance(ml_result, dict) or ml_result.get("status") != "scored":
             continue
         scored_pages.append(page)
         if bool(ml_result.get("vulnerable")):
-            high_risk_page_count += 1
+            high_priority_page_count += 1
+        if bool(ml_result.get("model_high_priority")):
+            model_high_risk_page_count += 1
     zap_alerts = (zap_result or {}).get("alerts", [])
     alert_count = len(zap_alerts) if isinstance(zap_alerts, list) else 0
     raw_confirmed_alert_count = (zap_result or {}).get("confirmed_alert_count", 0)
@@ -113,7 +117,8 @@ async def run_pipeline(
         "summary": {
             "pages_collected": len(page_artifacts),
             "pages_scored": len(scored_pages),
-            "ml_high_risk_pages": high_risk_page_count,
+            "high_priority_pages": high_priority_page_count,
+            "ml_high_risk_pages": model_high_risk_page_count,
             "zap_dom_xss_findings": alert_count,
             "verified_dom_xss_alerts": confirmed_alert_count,
         },
@@ -121,12 +126,15 @@ async def run_pipeline(
         "zap": zap_result,
         "model": {
             "algorithm": "LightGBM",
-            "feature_contract": "function-ast-bag-of-words-v1",
+            "feature_contract": FEATURE_CONTRACT,
+            "decision_policy": "model threshold OR static source/sink co-occurrence signal",
             "threshold": settings.ml_threshold,
         },
         "duration_seconds": round(time.time() - started_at, 2),
         "disclaimer": (
             "The ML score is a ranking signal, not a calibrated probability of exploitation. "
+            "Static source/sink co-occurrence raises investigation priority but does not prove "
+            "data flow or exploitability. "
             "Only ZAP active-rule findings are labeled confirmed; client-side rule findings "
             "still require reproducible evidence and human review."
         ),

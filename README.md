@@ -65,8 +65,10 @@ health observable independently.
   runtime-created code such as `eval` and `new Function`
 
 Collected code is deduplicated, divided into bounded function-sized units, and
-converted to the 500-feature vocabulary expected by the deployed LightGBM
-model. Units with no vocabulary coverage are not assigned a misleading score.
+converted to the 4,096-feature vocabulary expected by the deployed LightGBM
+model. The feature contract combines normalized AST token counts with
+deterministic source/sink co-occurrence features. Units with no vocabulary
+coverage are not assigned a misleading score.
 
 For the complete stage-by-stage contract, see
 [How the pipeline works](docs/PIPELINE.md).
@@ -223,7 +225,7 @@ options are:
 | `--detach` | Queue the scan, print its job ID, and return immediately. |
 | `domxss status JOB_ID --wait` | Resume monitoring a detached job. |
 | `--json` | Print the complete job and result object as JSON. |
-| `--fail-on-high-risk` | Return exit status `2` when ML marks at least one page high priority. |
+| `--fail-on-high-risk` | Return exit status `2` when the pipeline marks at least one page high priority. |
 | `--timeout SECONDS` | Set the maximum time the CLI waits for completion. |
 
 Example detached workflow:
@@ -256,7 +258,7 @@ deployment.
 |---|---|
 | **Complete / Partial / Failed** | Whether page collection completed fully, returned usable data with warnings, or failed. |
 | **ML risk score** | Highest function-level model score on the page; useful for ranking, not proof of exploitation. |
-| **High priority** | Score is at or above `ML_THRESHOLD`; review or dynamically test the finding. |
+| **High priority** | The model score crossed `ML_THRESHOLD`, a static source/sink pair was observed, or both. Review the decision basis; this is not proof of data flow. |
 | **Feature coverage** | Share of extracted token occurrences represented in the model vocabulary. |
 | **Insufficient coverage** | No code unit matched the vocabulary well enough to make an ML decision. |
 | **Client-side detection** | ZAP browser-side evidence that still needs analyst reproduction. |
@@ -404,17 +406,19 @@ paper's TensorFlow DNN. Runtime artifacts are prepared from a pinned source
 commit and checked for model/vocabulary compatibility before the application
 becomes ready.
 
-| Evaluation threshold | Precision | Recall | F1 | PR-AUC |
+| Runtime decision at `0.50` | Precision | Recall | F1 | PR-AUC |
 |---|---:|---:|---:|---:|
-| Validation-selected `0.96085` | 0.9545 | 0.7636 | 0.8485 | 0.9066 |
-| Runtime triage `0.50` | 0.8431 | 0.7818 | 0.8113 | 0.9066 |
+| LightGBM v2 only | 0.8545 | 0.8393 | 0.8468 | 0.9161 |
+| Model OR static source/sink signal | 0.7206 | 0.8750 | 0.7903 | — |
 
-On a separate 146,772-row negative-only CMU benchmark, the false-positive
-rates were 0.3359% at `0.96085` and 0.9818% at `0.50`. The browser pipeline
-keeps `0.50` because the higher threshold removed the only true positive in
-the repository's small page-level regression corpus. See
-[Model and research notes](docs/MODEL-AND-RESEARCH.md) for the full scope and
-limitations.
+The table evaluates the exported model on 3,215 strict test feature bags,
+including 56 positives, after a deterministic script-level split. The hybrid
+row reports the runtime decision policy separately so its recall gain and
+precision cost remain visible. The bundled 12-case page regression suite
+currently reports TP=6, FP=1, TN=5, and FN=0; it is a synthetic release
+regression, not external validation. See
+[Model and research notes](docs/MODEL-AND-RESEARCH.md) for the complete
+protocol and limitations.
 
 These are function-level results on a cleaned sampled derivative dataset. They
 are not page-level accuracy measurements for the public web and are not the
@@ -427,8 +431,9 @@ commercial accuracy claim.
 
 - Modern Chromium plus Tree-sitter does not reproduce the paper's modified
   Chromium 57/V8 taint instrumentation byte for byte.
-- The current model was trained on a cleaned sample rather than the complete raw
-  CMU `.xz` release.
+- The current model was trained from the 87,210 usable rows in the
+  CMU-derived positive/negative workbook export; 3,290 Excel-truncated cells
+  were rejected rather than parsed as complete feature dictionaries.
 - Authenticated crawling and custom interaction scripts are not implemented.
 - Bot protection and interaction-dependent paths can reduce collection
   coverage.

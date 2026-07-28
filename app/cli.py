@@ -102,7 +102,7 @@ def _parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--fail-on-high-risk",
         action="store_true",
-        help="exit with status 2 when the model marks a page high priority",
+        help="exit with status 2 when the pipeline marks a page high priority",
     )
 
     status = commands.add_parser("status", help="read an existing job")
@@ -188,6 +188,10 @@ def _render_result(result: dict[str, Any], console: Console) -> None:
     summary = result.get("summary") or {}
     pages = result.get("pages") or []
     duration = result.get("duration_seconds", "n/a")
+    high_priority_pages = summary.get(
+        "high_priority_pages",
+        summary.get("ml_high_risk_pages", 0),
+    )
 
     console.write(console.bold("ANALYSIS COMPLETE"))
     console.write(
@@ -195,7 +199,7 @@ def _render_result(result: dict[str, Any], console: Console) -> None:
             (
                 f"pages {summary.get('pages_collected', 0)}",
                 f"scored {summary.get('pages_scored', 0)}",
-                f"high-risk {summary.get('ml_high_risk_pages', 0)}",
+                f"high-priority {high_priority_pages}",
                 f"confirmed {summary.get('verified_dom_xss_alerts', 0)}",
                 f"duration {duration}s",
             )
@@ -208,9 +212,14 @@ def _render_result(result: dict[str, Any], console: Console) -> None:
         return
 
     terminal_width = max(72, shutil.get_terminal_size((100, 24)).columns)
-    url_width = max(24, terminal_width - 39)
-    console.write(f"{'PRIORITY':<10} {'SCORE':<8} {'COVERAGE':<10} PAGE")
-    console.write(f"{'─' * 8:<10} {'─' * 6:<8} {'─' * 8:<10} {'─' * min(url_width, 40)}")
+    url_width = max(24, terminal_width - 55)
+    console.write(
+        f"{'PRIORITY':<10} {'SCORE':<8} {'COVERAGE':<10} {'BASIS':<14} PAGE"
+    )
+    console.write(
+        f"{'─' * 8:<10} {'─' * 6:<8} {'─' * 8:<10} "
+        f"{'─' * 12:<14} {'─' * min(url_width, 40)}"
+    )
 
     for page in pages:
         ml = page.get("ml") or {}
@@ -223,8 +232,16 @@ def _render_result(result: dict[str, Any], console: Console) -> None:
             priority = console.yellow("REVIEW")
             score = "n/a"
         coverage = _percentage(ml.get("feature_coverage"))
+        basis = {
+            "model": "model",
+            "security_signal": "source/sink",
+            "model_and_security_signal": "model+signal",
+            "none": "none",
+        }.get(str(ml.get("decision_basis", "none")), "n/a")
         page_url = _truncate(str(page.get("url", "")), url_width)
-        console.write(f"{priority:<10} {score:<8} {coverage:<10} {page_url}")
+        console.write(
+            f"{priority:<10} {score:<8} {coverage:<10} {basis:<14} {page_url}"
+        )
 
         collection_status = str(page.get("collection_status", "complete"))
         if collection_status != "complete":
@@ -233,7 +250,9 @@ def _render_result(result: dict[str, Any], console: Console) -> None:
             console.write(f"  warning: {warning}")
 
     console.write()
-    console.write("ML scores rank findings; they do not prove exploitability.")
+    console.write(
+        "Scores and source/sink signals prioritize review; they do not prove exploitability."
+    )
 
 
 def _render_job(payload: dict[str, Any], console: Console, *, as_json: bool) -> None:
@@ -262,7 +281,11 @@ def _scan_exit_code(payload: dict[str, Any], *, fail_on_high_risk: bool) -> int:
         return 0
     result = payload.get("result") or {}
     summary = result.get("summary") or {}
-    return 2 if int(summary.get("ml_high_risk_pages", 0)) > 0 else 0
+    high_priority = summary.get(
+        "high_priority_pages",
+        summary.get("ml_high_risk_pages", 0),
+    )
+    return 2 if int(high_priority) > 0 else 0
 
 
 def _run(args: argparse.Namespace, console: Console) -> int:

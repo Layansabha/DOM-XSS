@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-MODEL_NAME = "lightgbm_grouped_model.txt"
-VOCABULARY_NAME = "vocab_top500_grouped.json"
-METADATA_NAME = "lightgbm_grouped_metadata.json"
+MODEL_NAME = "lightgbm_security_v2.txt"
+VOCABULARY_NAME = "vocab_security_v2.json"
+METADATA_NAME = "lightgbm_security_v2_metadata.json"
 MANIFEST_NAME = "artifact-manifest.json"
 
 
@@ -54,23 +54,25 @@ def verify_bundle(artifact_dir: Path) -> dict[str, str]:
         model_text = (artifact_dir / MODEL_NAME).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise RuntimeError("LightGBM model is not valid UTF-8 text") from exc
-    if "max_feature_idx=499" not in model_text:
-        raise RuntimeError("LightGBM model does not declare exactly 500 features")
+    if "max_feature_idx=4095" not in model_text:
+        raise RuntimeError("LightGBM model does not declare exactly 4096 features")
 
     vocabulary = read_json(artifact_dir / VOCABULARY_NAME)
-    if not isinstance(vocabulary, dict) or len(vocabulary) != 500:
-        raise RuntimeError("vocabulary must contain exactly 500 entries")
+    if not isinstance(vocabulary, dict) or len(vocabulary) != 4096:
+        raise RuntimeError("vocabulary must contain exactly 4096 entries")
     if not all(
         isinstance(token, str) and isinstance(index, int)
         for token, index in vocabulary.items()
     ):
         raise RuntimeError("vocabulary entries are invalid")
-    if sorted(vocabulary.values()) != list(range(500)):
+    if sorted(vocabulary.values()) != list(range(4096)):
         raise RuntimeError("vocabulary indexes must be contiguous and unique")
 
     metadata = read_json(artifact_dir / METADATA_NAME)
-    if not isinstance(metadata, dict) or metadata.get("artifact_version") != 2:
+    if not isinstance(metadata, dict) or metadata.get("artifact_version") != 3:
         raise RuntimeError("model metadata has an unsupported artifact version")
+    if metadata.get("feature_contract") != "cmu-ast-bow-security-interactions-v2":
+        raise RuntimeError("model metadata has an incompatible feature contract")
     if metadata.get("output_semantics") != "risk_score_not_calibrated_probability":
         raise RuntimeError("model metadata has incompatible score semantics")
 

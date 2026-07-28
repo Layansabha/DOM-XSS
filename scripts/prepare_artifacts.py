@@ -8,25 +8,30 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-SOURCE_COMMIT = "f3eff79a4b695ea9c36edf810917889c3b05e9a7"
+SOURCE_COMMIT = "9708b857073e4782eab245acada38ac5761d8c3e"
 BASE_URL = f"https://raw.githubusercontent.com/Layansabha/Dom-xss-ML/{SOURCE_COMMIT}"
 SOURCE_ARTIFACTS = {
     "model": {
-        "path": "models/lightgbm_grouped_model.txt",
-        "git_blob_sha": "a721cd648fcee6467c3864b94f98841f595f51ff",
-        "size": 1_016_695,
+        "path": "models/lightgbm_security_v2.txt",
+        "git_blob_sha": "ff1c2431ecc439e0315bf408508b8196d873d097",
+        "size": 2_753_307,
     },
     "vocabulary": {
-        "path": "preprocessing/vocab_top500_grouped.json",
-        "git_blob_sha": "d54e409b236c982762ed19b1a6ec72857812fc1e",
-        "size": 9_239,
+        "path": "preprocessing/vocab_security_v2.json",
+        "git_blob_sha": "3960504af1931bbaccc87a5fda4405562bf915ff",
+        "size": 98_319,
     },
     "metadata": {
-        "path": "models/lightgbm_grouped_metadata.json",
-        "git_blob_sha": "6457f73d5cd2fab8c179d62b2d5634a9fcd4af33",
-        "size": 3_319,
+        "path": "models/lightgbm_security_v2_metadata.json",
+        "git_blob_sha": "31e75a17678e5b2e561015971c7a4a239d381012",
+        "size": 5_215,
     },
 }
+RETIRED_RUNTIME_ARTIFACTS = (
+    "lightgbm_grouped_metadata.json",
+    "lightgbm_grouped_model.txt",
+    "vocab_top500_grouped.json",
+)
 
 
 def git_blob_sha(data: bytes) -> str:
@@ -93,24 +98,26 @@ def main() -> None:
         model_text = source_model.read_text(encoding="utf-8")
         vocabulary = json.loads(source_vocabulary.read_text(encoding="utf-8"))
         metadata = json.loads(source_metadata.read_text(encoding="utf-8"))
-        if "max_feature_idx=499" not in model_text:
-            raise RuntimeError("source model does not declare 500 features")
-        if not isinstance(vocabulary, dict) or len(vocabulary) != 500:
-            raise RuntimeError("source vocabulary is not a 500-token mapping")
+        if "max_feature_idx=4095" not in model_text:
+            raise RuntimeError("source model does not declare 4096 features")
+        if not isinstance(vocabulary, dict) or len(vocabulary) != 4096:
+            raise RuntimeError("source vocabulary is not a 4096-token mapping")
         if not all(
             isinstance(token, str) and isinstance(index, int) for token, index in vocabulary.items()
         ):
             raise RuntimeError("source vocabulary entries are invalid")
         if sorted(vocabulary.values()) != list(range(len(vocabulary))):
             raise RuntimeError("source vocabulary indexes are not contiguous and unique")
-        if not isinstance(metadata, dict) or metadata.get("artifact_version") != 2:
+        if not isinstance(metadata, dict) or metadata.get("artifact_version") != 3:
             raise RuntimeError("source metadata is invalid")
+        if metadata.get("feature_contract") != "cmu-ast-bow-security-interactions-v2":
+            raise RuntimeError("source feature contract is incompatible")
         if metadata.get("output_semantics") != "risk_score_not_calibrated_probability":
             raise RuntimeError("source score semantics are missing")
 
-        native_model = staging / "lightgbm_grouped_model.txt"
-        native_vocabulary = staging / "vocab_top500_grouped.json"
-        native_metadata = staging / "lightgbm_grouped_metadata.json"
+        native_model = staging / "lightgbm_security_v2.txt"
+        native_vocabulary = staging / "vocab_security_v2.json"
+        native_metadata = staging / "lightgbm_security_v2_metadata.json"
         source_model.replace(native_model)
         write_json(native_vocabulary, vocabulary)
         write_json(native_metadata, metadata)
@@ -144,6 +151,12 @@ def main() -> None:
         for artifact in (native_model, native_vocabulary, native_metadata, manifest_path):
             artifact.replace(output_dir / artifact.name)
             print(f"installed {artifact.name}")
+
+        for retired_name in RETIRED_RUNTIME_ARTIFACTS:
+            retired_path = output_dir / retired_name
+            if retired_path.is_file():
+                retired_path.unlink()
+                print(f"removed retired artifact {retired_name}")
 
 
 if __name__ == "__main__":

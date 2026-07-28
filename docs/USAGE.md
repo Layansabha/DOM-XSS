@@ -53,9 +53,9 @@ curl -fsS http://127.0.0.1:8000/readyz
 
 Existing `.env` files that still use
 `/app/artifacts/lightgbm_model.txt` and
-`/app/artifacts/vocab_top500_filtered.json` are migrated to the grouped
-artifact paths by the application. New installations should use the paths in
-`.env.example`.
+`/app/artifacts/vocab_top500_filtered.json`, or the later grouped-artifact
+paths, are migrated to the security-v2 artifact paths by the application. New
+installations should use the paths in `.env.example`.
 
 ## Scan modes
 
@@ -158,7 +158,7 @@ docker compose exec -T worker python -c \
   'from app.services.ml import get_model_service; model=get_model_service(); print(model.model.num_feature(), len(model.vocabulary))'
 ```
 
-A valid bundled model prints `500 500`.
+A valid bundled model prints `4096 4096`.
 
 ## Structured logs
 

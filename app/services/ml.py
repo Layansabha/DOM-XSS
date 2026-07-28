@@ -34,7 +34,9 @@ class Prediction:
     status: str
     risk_score: float | None
     vulnerable: bool | None
+    model_high_priority: bool | None
     decision: str
+    decision_basis: str
     threshold: float
     code_units_analyzed: int
     code_units_scored: int
@@ -43,6 +45,7 @@ class Prediction:
     matched_tokens: int
     total_tokens: int
     feature_coverage: float
+    security_signals: list[str]
     top_matched_features: list[MatchedFeature]
 
 
@@ -99,9 +102,16 @@ class ModelService:
         extracted_units: list[ExtractedFeatures] = []
         page_matched_tokens = 0
         page_total_tokens = 0
+        security_signals: set[str] = set()
         for unit in units:
+            counts = ast_token_counts(unit.source)
+            security_signals.update(
+                token.removeprefix("sec_pair_")
+                for token in counts
+                if token.startswith("sec_pair_")
+            )
             vector, extracted = vectorize_counts(
-                ast_token_counts(unit.source),
+                counts,
                 self.vocabulary,
             )
             page_matched_tokens += extracted.matched_tokens
@@ -120,7 +130,9 @@ class ModelService:
                 status="insufficient_feature_coverage",
                 risk_score=None,
                 vulnerable=None,
+                model_high_priority=None,
                 decision="insufficient_feature_coverage",
+                decision_basis="none",
                 threshold=self.threshold,
                 code_units_analyzed=len(units),
                 code_units_scored=0,
@@ -129,6 +141,7 @@ class ModelService:
                 matched_tokens=0,
                 total_tokens=page_total_tokens,
                 feature_coverage=feature_coverage,
+                security_signals=sorted(security_signals),
                 top_matched_features=[],
             )
 
@@ -137,6 +150,18 @@ class ModelService:
         riskiest_index = int(np.argmax(risk_scores))
         risk_score = float(risk_scores[riskiest_index])
         extracted = extracted_units[riskiest_index]
+        model_high_priority = risk_score >= self.threshold
+        signal_high_priority = bool(security_signals)
+        high_priority = model_high_priority or signal_high_priority
+        decision_basis = (
+            "model_and_security_signal"
+            if model_high_priority and signal_high_priority
+            else "model"
+            if model_high_priority
+            else "security_signal"
+            if signal_high_priority
+            else "none"
+        )
 
         matched: list[MatchedFeature] = []
         for token, count in extracted.counts.most_common():
@@ -149,8 +174,10 @@ class ModelService:
         return Prediction(
             status="scored",
             risk_score=risk_score,
-            vulnerable=risk_score >= self.threshold,
-            decision="high_priority" if risk_score >= self.threshold else "low_priority",
+            vulnerable=high_priority,
+            model_high_priority=model_high_priority,
+            decision="high_priority" if high_priority else "low_priority",
+            decision_basis=decision_basis,
             threshold=self.threshold,
             code_units_analyzed=len(units),
             code_units_scored=len(scorable_units),
@@ -159,6 +186,7 @@ class ModelService:
             matched_tokens=extracted.matched_tokens,
             total_tokens=extracted.total_tokens,
             feature_coverage=feature_coverage,
+            security_signals=sorted(security_signals),
             top_matched_features=matched,
         )
 

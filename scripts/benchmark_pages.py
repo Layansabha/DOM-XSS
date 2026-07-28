@@ -136,13 +136,22 @@ def evaluate(
                 "label": case["label"],
                 "category": case["category"],
                 "decision": (
-                    "vulnerable"
+                    "high_priority"
                     if decision is True
-                    else "safe"
+                    else "low_priority"
                     if decision is False
                     else "abstained"
                 ),
                 "risk_score": prediction.risk_score if prediction is not None else None,
+                "model_high_priority": (
+                    prediction.model_high_priority if prediction is not None else None
+                ),
+                "decision_basis": (
+                    prediction.decision_basis if prediction is not None else "none"
+                ),
+                "security_signals": (
+                    prediction.security_signals if prediction is not None else []
+                ),
                 "feature_coverage": (
                     prediction.feature_coverage if prediction is not None else 0.0
                 ),
