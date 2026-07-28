@@ -92,6 +92,49 @@ The API process does not perform the scan directly. It validates the request,
 places a job in Redis, and returns immediately. The RQ worker performs browser
 collection, ML inference, and optional ZAP verification.
 
+## Command-line client
+
+The application image installs the `domxss` CLI. Use it from the running API
+container:
+
+```bash
+docker compose exec -T api domxss health
+
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page
+```
+
+The scan command waits by default and prints progress to standard error followed
+by a compact result table. Available workflows include:
+
+```bash
+# Submit now and inspect the job later.
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --detach
+
+docker compose exec -T api domxss status JOB_ID --wait
+
+# JSON output for jq, CI, or another program.
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --json
+
+# Opt in to exit status 2 when a page is marked high priority.
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --fail-on-high-risk
+```
+
+`--verify` requests ZAP analysis and is rejected unless the ZAP override is
+running. `--api-url` can target another deployment when the package is installed
+on the host. Exit status `1` indicates an operational failure; the default scan
+exit status remains `0` even when ML produces a high-risk triage signal.
+
 ## Health and readiness
 
 ```bash

@@ -42,6 +42,9 @@ async def test_index_returns_security_headers_and_request_id() -> None:
     assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
     assert "default-src 'self'" in response.headers["content-security-policy"]
     assert response.headers["x-request-id"]
+    assert "DOMXSS Analysis Console" in response.text
+    assert "INVESTIGATION WORKSPACE" in response.text
+    assert "Prioritize suspicious client-side code" not in response.text
 
 
 @pytest.mark.asyncio

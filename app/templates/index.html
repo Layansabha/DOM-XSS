@@ -3,83 +3,130 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DOM XSS Pipeline</title>
-  <meta name="description" content="LightGBM-assisted DOM XSS analysis with optional OWASP ZAP verification">
+  <title>DOMXSS Analysis Console</title>
+  <meta name="description" content="Browser-assisted DOM XSS triage and verification console">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="DOMXSS home">
+        <span class="brand-mark" aria-hidden="true">DX</span>
+        <span>DOMXSS</span>
+      </a>
+      <div class="topbar-meta">
+        <span class="service-state"><i aria-hidden="true"></i> Analysis console</span>
+        <a href="/docs">API docs</a>
+      </div>
+    </div>
+  </header>
+
   <main class="shell">
-    <header class="hero">
-      <p class="eyebrow">DOM XSS ANALYSIS PIPELINE</p>
-      <h1>Prioritize suspicious client-side code, then verify it safely.</h1>
-      <p class="intro">
-        Browser-rendered DOM collection, function-level JavaScript AST analysis, LightGBM
-        inference, and optional OWASP ZAP client-side and active DOM-XSS analysis.
-      </p>
+    <header class="page-header">
+      <div>
+        <p class="kicker">INVESTIGATION WORKSPACE</p>
+        <h1>DOM XSS analysis</h1>
+        <p>
+          Collect browser-rendered JavaScript, rank suspicious code with LightGBM,
+          and optionally validate findings with OWASP ZAP.
+        </p>
+      </div>
+      <div class="model-state">
+        <span>MODEL</span>
+        <strong>LightGBM</strong>
+        <small>threshold {{ ml_threshold }}</small>
+      </div>
     </header>
 
-    <section class="panel">
-      <form id="scan-form">
-        <label for="target-url">Target URL</label>
-        <input
-          id="target-url"
-          name="target_url"
-          type="url"
-          placeholder="https://example.com/"
-          autocomplete="url"
-          maxlength="2048"
-          required
-        >
-
-        <div class="grid">
+    <section class="panel scan-panel" aria-labelledby="new-scan-title">
+      <div class="panel-heading">
+        <div>
+          <p class="section-index">01</p>
           <div>
-            <label for="scope-mode">Scope</label>
+            <h2 id="new-scan-title">New analysis</h2>
+            <p>Enter one page or a domain you are authorized to test.</p>
+          </div>
+        </div>
+        <span class="mode-badge">{% if zap_enabled %}ML + ZAP{% else %}ML ONLY{% endif %}</span>
+      </div>
+
+      <form id="scan-form">
+        <div class="field">
+          <label for="target-url">Target URL</label>
+          <input
+            id="target-url"
+            name="target_url"
+            type="url"
+            placeholder="https://target.example/path"
+            autocomplete="url"
+            maxlength="2048"
+            spellcheck="false"
+            required
+          >
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label for="scope-mode">Collection scope</label>
             <select id="scope-mode" name="scope_mode">
-              <option value="auto">Auto</option>
-              <option value="domain">Domain crawl</option>
+              <option value="auto">Auto detect</option>
+              <option value="domain">Same-origin domain crawl</option>
               <option value="page">Single page</option>
             </select>
           </div>
-          <div class="threshold">
-            <span>ML threshold</span>
-            <strong>{{ ml_threshold }}</strong>
+
+          <div class="verification-control">
+            <label class="check-row" for="dynamic-verification">
+              <input
+                id="dynamic-verification"
+                type="checkbox"
+                {% if not zap_enabled %}disabled{% endif %}
+              >
+              <span>
+                <strong>Dynamic verification</strong>
+                <small>
+                  {% if zap_enabled %}
+                    Run the restricted OWASP ZAP DOM XSS rules
+                  {% else %}
+                    Start with the ZAP Compose profile to enable
+                  {% endif %}
+                </small>
+              </span>
+            </label>
           </div>
         </div>
 
-        <label class="check-row">
-          <input
-            id="dynamic-verification"
-            type="checkbox"
-            {% if not zap_enabled %}disabled{% endif %}
-          >
-          <span>
-            Run open-source OWASP ZAP dynamic analysis
-            {% if not zap_enabled %}<small>Not enabled in ML-only mode</small>{% endif %}
-          </span>
-        </label>
-
         <p class="warning hidden" id="active-warning">
-          Dynamic verification sends active payloads. Do not use it on systems without permission.
+          Active payloads will be sent to the target. Continue only with explicit authorization.
         </p>
 
-        <button type="submit" id="submit-button">Start analysis</button>
+        <div class="form-actions">
+          <p>Private and reserved network targets are blocked by default.</p>
+          <button type="submit" id="submit-button">Run analysis</button>
+        </div>
       </form>
     </section>
 
     <section class="status-card hidden" id="status-card" aria-live="polite">
       <div class="status-line">
-        <strong id="status-label">Queued</strong>
+        <div>
+          <span class="status-dot" aria-hidden="true"></span>
+          <strong id="status-label">Queued</strong>
+          <span id="stage-label"></span>
+        </div>
         <span id="progress-label">0%</span>
       </div>
-      <div class="progress"><div id="progress-bar"></div></div>
-      <p id="stage-label"></p>
+      <div class="progress" role="progressbar" aria-label="Analysis progress">
+        <div id="progress-bar"></div>
+      </div>
     </section>
 
-    <section class="results hidden" id="results"></section>
+    <section class="results hidden" id="results" aria-label="Analysis results"></section>
 
     <footer>
-      Use only on systems you are permitted to test. ML scores rank findings; they do not prove exploitability.
+      <span>DOMXSS Pipeline</span>
+      <span>Use only on systems you are authorized to test.</span>
     </footer>
   </main>
 </body>

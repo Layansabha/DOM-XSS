@@ -27,6 +27,17 @@ function percentage(value) {
   return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
+function stateLabel(value) {
+  return {
+    queued: "QUEUED",
+    started: "RUNNING",
+    finished: "COMPLETE",
+    failed: "FAILED",
+    stopped: "STOPPED",
+    canceled: "CANCELED",
+  }[value] || String(value || "UNKNOWN").toUpperCase();
+}
+
 function renderResults(data) {
   const summary = data.summary;
   const pages = data.pages || [];
@@ -39,18 +50,18 @@ function renderResults(data) {
     const scored = ml.status === "scored";
     const riskClass = scored ? (ml.vulnerable ? "risk-high" : "risk-low") : "risk-unknown";
     const score = scored
-      ? `ML risk score ${percentage(ml.risk_score)}`
+      ? `SCORE ${percentage(ml.risk_score)}`
       : (ml.status === "insufficient_feature_coverage"
-        ? "Insufficient coverage"
-        : "Not scored");
+        ? "LOW COVERAGE"
+        : "NOT SCORED");
     const decision = scored
-      ? (ml.vulnerable ? "High priority" : "Low priority")
-      : "No ML decision";
+      ? (ml.vulnerable ? "HIGH PRIORITY" : "LOW PRIORITY")
+      : "NO ML DECISION";
     const collectionStatus = page.collection_status || "complete";
     const collectionBadge = collectionStatus === "partial"
-      ? '<span class="collection-pill collection-partial">Partial scan</span>'
+      ? '<span class="collection-pill collection-partial">PARTIAL</span>'
       : (collectionStatus === "failed"
-        ? '<span class="collection-pill collection-failed">Collection failed</span>'
+        ? '<span class="collection-pill collection-failed">COLLECTION FAILED</span>'
         : "");
     const features = (ml.top_matched_features || [])
       .slice(0, 8)
@@ -87,7 +98,7 @@ function renderResults(data) {
         <h3>${escapeHtml(alert.name)}</h3>
         <div class="result-badges">
           <span class="decision-pill ${alert.confirmed ? "risk-high" : "risk-detected"}">
-            ${alert.confirmed ? "Actively confirmed" : "Client-side detection"}
+            ${alert.confirmed ? "ACTIVELY CONFIRMED" : "CLIENT-SIDE DETECTION"}
           </span>
           <span class="risk-pill risk-high">${escapeHtml(alert.risk)}</span>
         </div>
@@ -107,11 +118,11 @@ function renderResults(data) {
     <div class="summary-grid">
       <div><strong>${summary.pages_collected}</strong><span>Pages collected</span></div>
       <div><strong>${summary.pages_scored}</strong><span>Pages scored</span></div>
-      <div><strong>${summary.ml_high_risk_pages}</strong><span>ML high-risk pages</span></div>
-      <div><strong>${summary.zap_dom_xss_findings ?? 0}</strong><span>ZAP findings · ${summary.verified_dom_xss_alerts ?? 0} confirmed</span></div>
+      <div><strong>${summary.ml_high_risk_pages}</strong><span>High-priority pages</span></div>
+      <div><strong>${summary.zap_dom_xss_findings ?? 0}</strong><span>ZAP findings / ${summary.verified_dom_xss_alerts ?? 0} confirmed</span></div>
     </div>
     <div class="section-heading">
-      <h2>Page analysis</h2>
+      <h2>Analysis results</h2>
       <span>${escapeHtml(data.scope_mode)} · ${data.duration_seconds}s</span>
     </div>
     ${pageCards || '<p class="empty">No pages were collected.</p>'}
@@ -133,7 +144,7 @@ async function poll(statusUrl) {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "Failed to read scan status");
 
-    statusLabel.textContent = payload.state;
+    statusLabel.textContent = stateLabel(payload.state);
     progressLabel.textContent = `${payload.progress}%`;
     progressBar.style.width = `${payload.progress}%`;
     stageLabel.textContent = payload.stage || "";
@@ -157,11 +168,11 @@ form.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.textContent = "Submitting…";
   statusCard.classList.remove("hidden");
-  statusLabel.textContent = "queued";
+    statusLabel.textContent = "QUEUED";
   progressLabel.textContent = "0%";
   progressBar.style.width = "0%";
   progressBar.classList.remove("failed");
-  stageLabel.textContent = "creating job";
+    stageLabel.textContent = "Creating job";
 
   try {
     const response = await fetch("/api/scans", {
@@ -182,7 +193,7 @@ form.addEventListener("submit", async (event) => {
     }
     await poll(payload.status_url);
   } catch (error) {
-    statusLabel.textContent = "failed";
+    statusLabel.textContent = "FAILED";
     stageLabel.textContent = error.message;
     progressBar.style.width = "100%";
     progressBar.classList.add("failed");

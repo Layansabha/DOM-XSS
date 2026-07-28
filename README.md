@@ -184,6 +184,46 @@ Collection warnings such as an HTTP `403`, an invalid script URL, or a browser
 idle timeout mean the scan was partial. They should not be interpreted as a
 clean result.
 
+### Command-line client
+
+The image includes a first-party `domxss` client. Run it inside the API
+container so no host-side Python installation is required:
+
+```bash
+docker compose exec -T api domxss health
+
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page
+```
+
+Useful automation modes:
+
+```bash
+# Submit without waiting and print the job ID.
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --detach
+
+# Emit machine-readable output.
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --json
+
+# Return exit status 2 when ML marks at least one page high priority.
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --fail-on-high-risk
+```
+
+Add `--verify` only when the ZAP Compose override is running and the target is
+explicitly authorized. `domxss status JOB_ID --wait` resumes monitoring a
+detached job. Operational errors return exit status `1`; high-risk findings
+return `2` only when `--fail-on-high-risk` is requested.
+
 ## Repository layout
 
 | Path | Responsibility |
