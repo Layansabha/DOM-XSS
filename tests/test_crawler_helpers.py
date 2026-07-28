@@ -61,6 +61,9 @@ def test_network_idle_timeout_marks_public_result_partial() -> None:
 
     assert collection_status_from_warnings([]) == "complete"
     assert collection_status_from_warnings([warning]) == "partial"
+    assert collection_status_from_warnings(
+        ["Chromium runtime source collection failed: AttributeError"]
+    ) == "partial"
     assert collection_status_from_warnings(["page collection failed: TimeoutError"]) == "failed"
     assert artifact.public_metadata()["collection_status"] == "partial"
 
@@ -132,3 +135,106 @@ async def test_route_guard_blocks_a_redirect_rejected_by_policy() -> None:
 
     assert route.aborted_with == "blockedbyclient"
     assert route.continued is False
+
+
+@pytest.mark.asyncio
+async def test_runtime_script_event_handler_ignores_non_mapping_events() -> None:
+    class RecordingSession:
+        callback: object | None = None
+
+        def on(self, event: str, callback: object) -> None:
+            assert event == "Debugger.scriptParsed"
+            self.callback = callback
+
+        async def send(self, method: str) -> dict[str, object]:
+            assert method == "Debugger.enable"
+            return {}
+
+        async def detach(self) -> None:
+            pass
+
+    session = RecordingSession()
+    context = SimpleNamespace(new_cdp_session=lambda page: None)
+
+    async def new_cdp_session(page: object) -> RecordingSession:
+        return session
+
+    context.new_cdp_session = new_cdp_session
+    crawler = BrowserCrawler(Settings(_env_file=None), SimpleNamespace())
+
+    returned_session, parsed = await crawler._start_runtime_script_collection(  # type: ignore[arg-type]
+        context,  # type: ignore[arg-type]
+        SimpleNamespace(),  # type: ignore[arg-type]
+    )
+    callback = session.callback
+    assert callable(callback)
+    callback(None)
+    callback({"scriptId": "7", "url": "https://example.com/app.js"})
+
+    assert returned_session is session
+    assert parsed == [{"scriptId": "7", "url": "https://example.com/app.js"}]
+
+
+@pytest.mark.asyncio
+async def test_runtime_script_collection_rejects_invalid_cdp_payloads_without_crashing() -> None:
+    class StubSession:
+        async def send(
+            self,
+            method: str,
+            params: dict[str, str],
+        ) -> dict[str, str] | None:
+            assert method == "Debugger.getScriptSource"
+            if params["scriptId"] == "1":
+                return None
+            return {"scriptSource": "function sink() { document.write(location.hash); }"}
+
+    crawler = BrowserCrawler(Settings(_env_file=None), SimpleNamespace())
+    parsed_scripts = [
+        None,
+        {"scriptId": "1", "url": "https://example.com/invalid.js"},
+        {"scriptId": "2", "url": "https://example.com/app.js"},
+    ]
+
+    nodes, warnings = await crawler._finish_runtime_script_collection(  # type: ignore[arg-type]
+        StubSession(),  # type: ignore[arg-type]
+        parsed_scripts,  # type: ignore[arg-type]
+    )
+
+    assert nodes == [
+        {
+            "src": "https://example.com/app.js",
+            "text": "function sink() { document.write(location.hash); }",
+        }
+    ]
+    assert warnings == ["Chromium runtime source could not be read (2 occurrences)"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_script_setup_failure_detaches_session() -> None:
+    class FailingSession:
+        detached = False
+
+        def on(self, event: str, callback: object) -> None:
+            pass
+
+        async def send(self, method: str) -> dict[str, object]:
+            raise AttributeError("unexpected CDP response")
+
+        async def detach(self) -> None:
+            self.detached = True
+
+    session = FailingSession()
+
+    async def new_cdp_session(page: object) -> FailingSession:
+        return session
+
+    context = SimpleNamespace(new_cdp_session=new_cdp_session)
+    crawler = BrowserCrawler(Settings(_env_file=None), SimpleNamespace())
+
+    with pytest.raises(AttributeError, match="unexpected CDP response"):
+        await crawler._start_runtime_script_collection(  # type: ignore[arg-type]
+            context,  # type: ignore[arg-type]
+            SimpleNamespace(),  # type: ignore[arg-type]
+        )
+
+    assert session.detached is True

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections import Counter, deque
 from dataclasses import asdict, dataclass
@@ -13,6 +14,8 @@ from playwright.async_api import BrowserContext, CDPSession, Page, Route, async_
 from app.config import Settings
 from app.redaction import redact_url_query
 from app.services.url_guard import RequestPolicy, UnsafeTargetError, same_origin
+
+logger = logging.getLogger(__name__)
 
 _SKIP_PATH_RE = re.compile(
     r"(?:^|/)(?:logout|log-out|signout|sign-out|delete|remove|unsubscribe)(?:/|$)",
@@ -69,7 +72,7 @@ def summarize_warnings(warnings: list[str]) -> list[str]:
 def collection_status_from_warnings(warnings: list[str]) -> str:
     if any(warning.startswith("page collection failed:") for warning in warnings):
         return "failed"
-    if _NETWORK_IDLE_WARNING in warnings:
+    if warnings:
         return "partial"
     return "complete"
 
@@ -309,14 +312,30 @@ class BrowserCrawler:
     ) -> tuple[CDPSession, list[dict[str, object]]]:
         """Track JavaScript parsed by Chromium, including eval/new Function sources."""
         session = await context.new_cdp_session(page)
-        parsed_scripts: list[dict[str, object]] = []
-        session.on("Debugger.scriptParsed", parsed_scripts.append)
-        await session.send("Debugger.enable")
-        # Enabling the debugger replays scripts from the document that is
-        # about to be replaced. Keep only scripts parsed for this navigation.
-        await asyncio.sleep(0)
-        parsed_scripts.clear()
-        return session, parsed_scripts
+        try:
+            parsed_scripts: list[dict[str, object]] = []
+
+            def record_script(event: object) -> None:
+                if isinstance(event, dict):
+                    parsed_scripts.append(event)
+
+            session.on("Debugger.scriptParsed", record_script)
+            await session.send("Debugger.enable")
+            # Enabling the debugger replays scripts from the document that is
+            # about to be replaced. Keep only scripts parsed for this navigation.
+            await asyncio.sleep(0)
+            parsed_scripts.clear()
+            return session, parsed_scripts
+        except Exception:
+            await self._safe_detach_cdp_session(session)
+            raise
+
+    @staticmethod
+    async def _safe_detach_cdp_session(session: CDPSession) -> None:
+        try:
+            await session.detach()
+        except Exception:
+            logger.debug("CDP session cleanup failed", exc_info=True)
 
     async def _finish_runtime_script_collection(
         self,
@@ -329,6 +348,9 @@ class BrowserCrawler:
         failures = 0
 
         for event in parsed_scripts:
+            if not isinstance(event, dict):
+                failures += 1
+                continue
             script_id = str(event.get("scriptId", ""))
             if not script_id or script_id in seen_ids:
                 continue
@@ -342,6 +364,9 @@ class BrowserCrawler:
                 failures += 1
                 continue
 
+            if not isinstance(result, dict):
+                failures += 1
+                continue
             source = str(result.get("scriptSource", "")).strip()
             if not source:
                 continue
@@ -351,7 +376,6 @@ class BrowserCrawler:
             warnings.append(
                 f"Chromium runtime source could not be read ({failures} occurrences)"
             )
-        await session.detach()
         return nodes, warnings
 
     async def _collect_page(
@@ -362,10 +386,18 @@ class BrowserCrawler:
         target_origin_url: str,
     ) -> tuple[PageArtifact, list[str]]:
         warnings: list[str] = []
-        cdp_session, parsed_scripts = await self._start_runtime_script_collection(
-            context,
-            page,
-        )
+        cdp_session: CDPSession | None = None
+        parsed_scripts: list[dict[str, object]] = []
+        try:
+            cdp_session, parsed_scripts = await self._start_runtime_script_collection(
+                context,
+                page,
+            )
+        except Exception as exc:
+            warnings.append(
+                f"Chromium runtime source collection unavailable: {type(exc).__name__}"
+            )
+
         try:
             response = await page.goto(
                 url,
@@ -373,7 +405,8 @@ class BrowserCrawler:
                 timeout=self.settings.request_timeout_seconds * 1000,
             )
         except Exception:
-            await cdp_session.detach()
+            if cdp_session is not None:
+                await self._safe_detach_cdp_session(cdp_session)
             raise
         if response is not None and response.status >= 400:
             warnings.append(f"page returned HTTP {response.status}")
@@ -399,10 +432,22 @@ class BrowserCrawler:
         except Exception:
             warnings.append(_NETWORK_IDLE_WARNING)
 
-        runtime_script_nodes, runtime_warnings = (
-            await self._finish_runtime_script_collection(cdp_session, parsed_scripts)
-        )
-        warnings.extend(runtime_warnings)
+        runtime_script_nodes: list[dict[str, str]] = []
+        if cdp_session is not None:
+            try:
+                runtime_script_nodes, runtime_warnings = (
+                    await self._finish_runtime_script_collection(
+                        cdp_session,
+                        parsed_scripts,
+                    )
+                )
+                warnings.extend(runtime_warnings)
+            except Exception as exc:
+                warnings.append(
+                    f"Chromium runtime source collection failed: {type(exc).__name__}"
+                )
+            finally:
+                await self._safe_detach_cdp_session(cdp_session)
 
         final_url = await self.policy.validate(page.url)
         if not same_origin(target_origin_url, final_url):
@@ -486,6 +531,13 @@ class BrowserCrawler:
                         )
                         results.append(artifact)
                     except Exception as exc:
+                        logger.exception(
+                            "page collection failed",
+                            extra={
+                                "target_host": urlsplit(current_url).hostname or "",
+                                "error_type": type(exc).__name__,
+                            },
+                        )
                         results.append(
                             PageArtifact(
                                 url=current_url,
