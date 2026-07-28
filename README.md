@@ -3,6 +3,12 @@
 [![CI](https://github.com/Layansabha/DOM-XSS/actions/workflows/ci.yml/badge.svg)](https://github.com/Layansabha/DOM-XSS/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+[Quick start](#quick-start) ·
+[Web interface](#option-a-web-interface) ·
+[Command line](#option-b-command-line) ·
+[How it works](docs/PIPELINE.md) ·
+[Model and research](docs/MODEL-AND-RESEARCH.md)
+
 ML-assisted triage for potential DOM-based XSS, with browser-rendered
 JavaScript collection and optional OWASP ZAP verification.
 
@@ -138,22 +144,132 @@ ZAP uses the Client Spider for browser-side coverage and restricts active
 scanning to DOM-XSS rule `40026`. Its image and startup time are intentionally
 absent from the default profile.
 
-## Run a scan
+## Run your first scan
 
-The web interface supports three scope modes:
+After `/readyz` returns `{"status":"ready"}`, choose either the web interface
+or the command-line client. Both submit the same asynchronous pipeline job and
+return the same analysis.
 
-| Mode | Behaviour |
+| Interface | Best for | Start here |
 |---|---|
-| `Auto` | A root URL becomes a domain crawl; a URL with a path or query becomes a single-page scan. |
-| `Domain crawl` | Follows safe same-origin links within the configured page and depth limits. |
-| `Single page` | Analyses only the submitted URL. |
+| **Web interface** | Interactive scans and visual result review | Open `http://127.0.0.1:8000` |
+| **Command line** | Kali workflows, repeatable scans, JSON, and automation | Run `docker compose exec -T api domxss health` |
+
+### Option A: Web interface
+
+1. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+2. Paste an authorized HTTP or HTTPS URL into **Target URL**.
+3. Choose a collection scope:
+   - **Auto detect** treats a root URL as a domain crawl and a URL with a path
+     or query as one page.
+   - **Same-origin domain crawl** follows safe links on the same origin within
+     the configured limits.
+   - **Single page** analyzes only the submitted URL.
+4. Leave **Dynamic verification** off for ML-only analysis. The checkbox is
+   available only when the optional ZAP profile is running.
+5. Select **Run analysis** and wait for the status to reach **Complete**.
+
+The result shows collection completeness, scripts and code units analyzed,
+feature coverage, ML priority, risk score, and any ZAP evidence.
+
+### Option B: Command line
+
+The `domxss` client is already installed inside the application image. Check
+that the API, Redis, and model are ready:
+
+```bash
+docker compose exec -T api domxss health
+```
+
+Run one page and print a terminal summary:
+
+```bash
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page
+```
+
+Scan a bounded same-origin domain:
+
+```bash
+docker compose exec -T api domxss scan \
+  https://example.com/ \
+  --scope domain
+```
+
+Add `--json` for machine-readable output:
+
+```bash
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --json
+```
+
+For the restricted ZAP rules, start the ZAP profile first and add `--verify`:
+
+```bash
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --verify
+```
+
+Run `domxss --help` or `domxss scan --help` for all options. Common automation
+options are:
+
+| Option | Behaviour |
+|---|---|
+| `--detach` | Queue the scan, print its job ID, and return immediately. |
+| `domxss status JOB_ID --wait` | Resume monitoring a detached job. |
+| `--json` | Print the complete job and result object as JSON. |
+| `--fail-on-high-risk` | Return exit status `2` when ML marks at least one page high priority. |
+| `--timeout SECONDS` | Set the maximum time the CLI waits for completion. |
+
+Example detached workflow:
+
+```bash
+docker compose exec -T api domxss scan \
+  https://example.com/path \
+  --scope page \
+  --detach
+
+docker compose exec -T api domxss status JOB_ID --wait
+```
+
+### Scope and target safety
+
+| Scope | Behaviour |
+|---|---|
+| `auto` | A root URL becomes a domain crawl; a URL with a path or query becomes a single-page scan. |
+| `domain` | Follows safe same-origin links within the configured page and depth limits. |
+| `page` | Analyzes only the submitted URL. |
 
 Private, loopback, reserved, link-local, and metadata-style destinations are
 blocked by default. For an isolated lab you own, set
 `ALLOW_PRIVATE_TARGETS=true` in `.env`; do not enable it on a shared or public
 deployment.
 
-The same workflow is available through the API:
+### Interpret the result
+
+| Field or status | Meaning |
+|---|---|
+| **Complete / Partial / Failed** | Whether page collection completed fully, returned usable data with warnings, or failed. |
+| **ML risk score** | Highest function-level model score on the page; useful for ranking, not proof of exploitation. |
+| **High priority** | Score is at or above `ML_THRESHOLD`; review or dynamically test the finding. |
+| **Feature coverage** | Share of extracted token occurrences represented in the model vocabulary. |
+| **Insufficient coverage** | No code unit matched the vocabulary well enough to make an ML decision. |
+| **Client-side detection** | ZAP browser-side evidence that still needs analyst reproduction. |
+| **Confirmed** | ZAP active DOM-XSS rule `40026` returned scanner evidence; verify it before reporting. |
+
+Collection warnings such as an HTTP `403`, an invalid script URL, or a browser
+idle timeout mean the scan was partial. They should not be interpreted as a
+clean result.
+
+### Direct API access
+
+The web interface and CLI use the same API. Integrations can create a scan
+directly:
 
 ```bash
 curl -fsS -X POST http://127.0.0.1:8000/api/scans \
@@ -168,61 +284,6 @@ curl -fsS -X POST http://127.0.0.1:8000/api/scans \
 A valid request returns `202 Accepted`, a job ID, and a `status_url`. Poll that
 URL until `state` is `finished` or `failed`. Interactive OpenAPI documentation
 is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
-
-### Interpret the result
-
-| Field or status | Meaning |
-|---|---|
-| **ML risk score** | Highest function-level model score on the page; useful for ranking, not proof of exploitation. |
-| **High priority** | Score is at or above `ML_THRESHOLD`; review or dynamically test the finding. |
-| **Feature coverage** | Share of extracted token occurrences represented in the model vocabulary. |
-| **Insufficient coverage** | No code unit matched the vocabulary well enough to make an ML decision. |
-| **Client-side detection** | ZAP browser-side evidence that still needs analyst reproduction. |
-| **Confirmed** | ZAP active DOM-XSS rule `40026` returned scanner evidence; verify it before reporting. |
-
-Collection warnings such as an HTTP `403`, an invalid script URL, or a browser
-idle timeout mean the scan was partial. They should not be interpreted as a
-clean result.
-
-### Command-line client
-
-The image includes a first-party `domxss` client. Run it inside the API
-container so no host-side Python installation is required:
-
-```bash
-docker compose exec -T api domxss health
-
-docker compose exec -T api domxss scan \
-  https://example.com/path \
-  --scope page
-```
-
-Useful automation modes:
-
-```bash
-# Submit without waiting and print the job ID.
-docker compose exec -T api domxss scan \
-  https://example.com/path \
-  --scope page \
-  --detach
-
-# Emit machine-readable output.
-docker compose exec -T api domxss scan \
-  https://example.com/path \
-  --scope page \
-  --json
-
-# Return exit status 2 when ML marks at least one page high priority.
-docker compose exec -T api domxss scan \
-  https://example.com/path \
-  --scope page \
-  --fail-on-high-risk
-```
-
-Add `--verify` only when the ZAP Compose override is running and the target is
-explicitly authorized. `domxss status JOB_ID --wait` resumes monitoring a
-detached job. Operational errors return exit status `1`; high-risk findings
-return `2` only when `--fail-on-high-risk` is requested.
 
 ## Repository layout
 
