@@ -305,6 +305,13 @@ becomes ready.
 | Validation-selected `0.96085` | 0.9545 | 0.7636 | 0.8485 | 0.9066 |
 | Runtime triage `0.50` | 0.8431 | 0.7818 | 0.8113 | 0.9066 |
 
+On a separate 146,772-row negative-only CMU benchmark, the false-positive
+rates were 0.3359% at `0.96085` and 0.9818% at `0.50`. The browser pipeline
+keeps `0.50` because the higher threshold removed the only true positive in
+the repository's small page-level regression corpus. See
+[Model and research notes](docs/MODEL-AND-RESEARCH.md) for the full scope and
+limitations.
+
 These are function-level results on a cleaned sampled derivative dataset. They
 are not page-level accuracy measurements for the public web and are not the
 paper's reported results. The

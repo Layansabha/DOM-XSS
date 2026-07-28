@@ -70,6 +70,16 @@ The strict test contains 3,169 unique feature bags unseen by training or
 validation, including 55 positives. The runtime keeps `0.50` as the
 recall-oriented triage threshold before optional dynamic analysis.
 
+An additional negative-only benchmark used 146,772 unique feature bags from
+four separate CMU confirmed-data shards after excluding baseline scripts and
+features. At `0.96085`, the model produced 493 false positives (0.3359% FPR,
+99.6641% specificity). At `0.50`, it produced 1,441 false positives (0.9818%
+FPR, 99.0182% specificity). Vocabulary coverage was 95.6573%.
+
+This strengthens the evidence for specificity on additional in-distribution
+CMU negatives, but it does not measure recall because all 874 positive rows in
+those shards belonged to scripts already represented in the baseline.
+
 ## Page-level regression report
 
 The repository also ships a deterministic, hand-labeled 12-case page-level
@@ -77,17 +87,20 @@ corpus. It passes complete rendered-DOM and JavaScript inputs through the
 runtime extractor, scores every function, and applies the same maximum-score
 page decision used by the application.
 
-At the runtime threshold of `0.50`, the current model reports:
+The same frozen model was checked at both operating thresholds:
 
-| Cases | TP | FP | TN | FN | Precision | Recall | F1 | Accuracy |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 12 | 1 | 1 | 5 | 5 | 0.5000 | 0.1667 | 0.2500 | 0.5000 |
+| Threshold | Cases | TP | FP | TN | FN | Precision | Recall | F1 | Accuracy |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Runtime `0.50` | 12 | 1 | 1 | 5 | 5 | 0.5000 | 0.1667 | 0.2500 | 0.5000 |
+| CMU-selected `0.96085` | 12 | 0 | 0 | 6 | 6 | 0.0000 | 0.0000 | 0.0000 | 0.5000 |
 
-These low results are useful evidence, not a release gate to tune around. The
-model recognizes the corpus's direct `document.write` case but misses several
-obvious sink patterns, while the DOMPurify example is a false positive. That
-supports treating the output as a triage score and identifies concrete cases
-for the next retraining cycle.
+These low results are useful evidence, not a release gate to tune around. At
+`0.50`, the model recognizes the corpus's direct `document.write` case but
+misses several obvious sink patterns, while the DOMPurify example is a false
+positive. Raising the threshold removes that false positive but also the only
+true positive, so the runtime keeps `0.50` for triage before optional ZAP
+verification. This identifies feature-contract generalization—not threshold
+tuning—as the next model-development problem.
 
 Run the report with `make benchmark`. The
 [benchmark contract](../benchmarks/README.md) explains why this small,
