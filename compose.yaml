@@ -82,6 +82,10 @@ services:
       - ALL
     cap_add:
       - CHOWN
+      # The official entrypoint checks ownership recursively before dropping
+      # privileges. Redis 7 stores AOF files in a mode-700 appendonlydir, so a
+      # restart needs directory-search access to reuse the named volume.
+      - DAC_READ_SEARCH
       - SETGID
       - SETUID
     healthcheck:

@@ -122,6 +122,20 @@ jobs:
             up -d --no-build --wait
           python scripts/e2e_smoke.py
 
+      - name: Redis volume restart regression
+        env:
+          APP_IMAGE: dom-xss-pipeline:${{ github.sha }}
+        run: |
+          docker compose \
+            -f compose.yaml \
+            -f deploy/compose/e2e.yaml \
+            restart redis
+          docker compose \
+            -f compose.yaml \
+            -f deploy/compose/e2e.yaml \
+            up -d --no-build --wait
+          python scripts/e2e_smoke.py
+
       - name: Show end-to-end logs on failure
         if: failure()
         env:
