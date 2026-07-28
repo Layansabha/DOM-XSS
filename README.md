@@ -406,10 +406,10 @@ paper's TensorFlow DNN. Runtime artifacts are prepared from a pinned source
 commit and checked for model/vocabulary compatibility before the application
 becomes ready.
 
-| Runtime decision at `0.50` | Precision | Recall | F1 | PR-AUC |
-|---|---:|---:|---:|---:|
-| LightGBM v2 only | 0.8545 | 0.8393 | 0.8468 | 0.9161 |
-| Model OR static source/sink signal | 0.7206 | 0.8750 | 0.7903 | — |
+| Runtime decision at `0.50` | Accuracy | Precision | Recall | F1 | PR-AUC |
+|---|---:|---:|---:|---:|---:|
+| LightGBM v2 only | 0.9947 | 0.8545 | 0.8393 | 0.8468 | 0.9161 |
+| Model OR static source/sink signal | 0.9919 | 0.7206 | 0.8750 | 0.7903 | — |
 
 The table evaluates the exported model on 3,215 strict test feature bags,
 including 56 positives, after a deterministic script-level split. The hybrid
@@ -419,6 +419,10 @@ currently reports TP=6, FP=1, TN=5, and FN=0; it is a synthetic release
 regression, not external validation. See
 [Model and research notes](docs/MODEL-AND-RESEARCH.md) for the complete
 protocol and limitations.
+
+Accuracy is included for completeness, not as the headline quality claim:
+only 56 of the 3,215 strict test bags are positive. Precision, recall, F1, and
+PR-AUC are more informative for this imbalance.
 
 These are function-level results on a cleaned sampled derivative dataset. They
 are not page-level accuracy measurements for the public web and are not the

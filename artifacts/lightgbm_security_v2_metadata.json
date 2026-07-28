@@ -36,6 +36,7 @@
   },
   "evaluation": {
     "deployment_test_at_0_5": {
+      "accuracy": 0.9947122861586314,
       "confusion": {
         "fn": 9,
         "fp": 8,
@@ -52,6 +53,7 @@
       "threshold": 0.5
     },
     "deployment_test_hybrid_at_0_5": {
+      "accuracy": 0.9919129082426128,
       "combined_positive_rows": 68,
       "confusion": {
         "fn": 7,
@@ -70,6 +72,7 @@
     },
     "protocol": "Deterministic script-level split; train-only vocabulary; invalid, zero-coverage and conflicting-label feature bags excluded; training duplicates capped at 20 rows per feature bag; validation and test are unique and unseen by earlier splits; deployment threshold targets 95.0% validation recall.",
     "test": {
+      "accuracy": 0.9878693623639191,
       "confusion": {
         "fn": 5,
         "fp": 34,
@@ -86,6 +89,7 @@
       "threshold": 0.022059332583599253
     },
     "test_at_0_5": {
+      "accuracy": 0.9944012441679627,
       "confusion": {
         "fn": 10,
         "fp": 8,
@@ -102,6 +106,7 @@
       "threshold": 0.5
     },
     "test_hybrid": {
+      "accuracy": 0.9860031104199067,
       "combined_positive_rows": 91,
       "confusion": {
         "fn": 5,
@@ -119,6 +124,7 @@
       "threshold": 0.022059332583599253
     },
     "test_hybrid_at_0_5": {
+      "accuracy": 0.9922239502332815,
       "combined_positive_rows": 69,
       "confusion": {
         "fn": 6,

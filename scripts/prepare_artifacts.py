@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-SOURCE_COMMIT = "9708b857073e4782eab245acada38ac5761d8c3e"
+SOURCE_COMMIT = "12ac8b909e72315ffc75fd036310e1328455c1cf"
 BASE_URL = f"https://raw.githubusercontent.com/Layansabha/Dom-xss-ML/{SOURCE_COMMIT}"
 SOURCE_ARTIFACTS = {
     "model": {
@@ -23,8 +23,8 @@ SOURCE_ARTIFACTS = {
     },
     "metadata": {
         "path": "models/lightgbm_security_v2_metadata.json",
-        "git_blob_sha": "31e75a17678e5b2e561015971c7a4a239d381012",
-        "size": 5_215,
+        "git_blob_sha": "6df3280586b5681f9a015d3c263df95b2d53acf4",
+        "size": 5_443,
     },
 }
 RETIRED_RUNTIME_ARTIFACTS = (

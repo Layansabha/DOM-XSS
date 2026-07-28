@@ -84,15 +84,20 @@ The following table evaluates the **exported 460-tree artifact** at the runtime
 threshold on the strict test set. This distinction matters because the exported
 artifact is refit on train plus validation after model selection.
 
-| Decision at `0.50` | Rows | Positive | TP | FP | TN | FN | Precision | Recall | F1 | PR-AUC | ROC-AUC |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| LightGBM v2 only | 3,215 | 56 | 47 | 8 | 3,151 | 9 | 0.8545 | 0.8393 | 0.8468 | 0.9161 | 0.9967 |
-| Model OR source/sink signal | 3,215 | 56 | 49 | 19 | 3,140 | 7 | 0.7206 | 0.8750 | 0.7903 | — | — |
+| Decision at `0.50` | Rows | Positive | TP | FP | TN | FN | Accuracy | Precision | Recall | F1 | PR-AUC | ROC-AUC |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| LightGBM v2 only | 3,215 | 56 | 47 | 8 | 3,151 | 9 | 0.9947 | 0.8545 | 0.8393 | 0.8468 | 0.9161 | 0.9967 |
+| Model OR source/sink signal | 3,215 | 56 | 49 | 19 | 3,140 | 7 | 0.9919 | 0.7206 | 0.8750 | 0.7903 | — | — |
 
 The hybrid row is reported separately because it is not the model's performance:
 it is the application's runtime decision policy. Its extra static signal
 improves recall on this test while reducing precision. A syntactic source/sink
 pair does not prove attacker-controlled data reaches the sink.
+
+Accuracy is not treated as the headline metric. With only 56 positives among
+3,215 test bags, the negative majority makes accuracy look exceptionally high;
+precision, recall, F1, and PR-AUC better expose missed positives and false
+alerts.
 
 ## Page-level regression report
 

@@ -4,7 +4,7 @@
       "sha256": "ada2e4acd847410a04878924adfaf0a836630718a10b8abe3d35324fdb77b039"
     },
     "lightgbm_security_v2_metadata.json": {
-      "sha256": "e17d65910094e551f510d0205b277584aaf000538d9775693e6e55b872a817e8"
+      "sha256": "4dc352271c5ebb0da8215bfa31ec349bb832f21122fcf8c3b673d0098ca45ac9"
     },
     "vocab_security_v2.json": {
       "sha256": "3f4928e22d29eaeeb999cd7e0111cf3ade53aa8bdc891c0c113d78242d9ec4e4"
@@ -12,10 +12,10 @@
   },
   "source_artifacts": {
     "metadata": {
-      "git_blob_sha": "31e75a17678e5b2e561015971c7a4a239d381012",
+      "git_blob_sha": "6df3280586b5681f9a015d3c263df95b2d53acf4",
       "path": "models/lightgbm_security_v2_metadata.json",
-      "sha256": "e17d65910094e551f510d0205b277584aaf000538d9775693e6e55b872a817e8",
-      "size": 5215
+      "sha256": "4dc352271c5ebb0da8215bfa31ec349bb832f21122fcf8c3b673d0098ca45ac9",
+      "size": 5443
     },
     "model": {
       "git_blob_sha": "ff1c2431ecc439e0315bf408508b8196d873d097",
@@ -30,5 +30,5 @@
       "size": 98319
     }
   },
-  "source_commit": "9708b857073e4782eab245acada38ac5761d8c3e"
+  "source_commit": "12ac8b909e72315ffc75fd036310e1328455c1cf"
 }
