@@ -8,6 +8,5 @@ __pycache__
 .ruff_cache
 tests
 infra
-artifacts
 scan-results
 *.pyc

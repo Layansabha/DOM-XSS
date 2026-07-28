@@ -11,7 +11,13 @@ htmlcov/
 dist/
 build/
 *.egg-info/
-artifacts/
+# The deployed model bundle is versioned with the application so Docker builds
+# are reproducible and do not depend on GitHub being reachable.
+artifacts/*
+!artifacts/artifact-manifest.json
+!artifacts/lightgbm_grouped_metadata.json
+!artifacts/lightgbm_grouped_model.txt
+!artifacts/vocab_top500_grouped.json
 scan-results/
 .DS_Store
 .idea/

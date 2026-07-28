@@ -26,7 +26,7 @@ from app.schemas import (
     ScanState,
     ScanStatusResponse,
 )
-from app.services.ml import get_model_service
+from app.services.ml import ModelArtifactError, get_model_service
 from app.services.url_guard import UnsafeTargetError, normalize_url
 from app.tasks import execute_scan
 
@@ -179,6 +179,15 @@ async def create_scan(scan_request: ScanRequest, request: Request) -> ScanCreate
         normalized = normalize_url(scan_request.target_url)
     except UnsafeTargetError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        get_model_service()
+    except ModelArtifactError as exc:
+        logger.exception("scan rejected because model is unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ML model is unavailable",
+        ) from exc
 
     payload = scan_request.model_dump(mode="json")
     payload["target_url"] = normalized

@@ -102,6 +102,8 @@ curl -fsS http://127.0.0.1:8000/readyz
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The first build downloads
 the application image layers and Chromium; later starts reuse the local images.
+The verified LightGBM bundle is committed in this repository, so building the
+application does not depend on downloading a model from another repository.
 The default stack does not download or run ZAP.
 
 Stop all application and optional services with:
@@ -187,13 +189,14 @@ clean result.
 | Path | Responsibility |
 |---|---|
 | `app/` | FastAPI application, queue integration, pipeline services, templates, and static assets |
+| `artifacts/` | Versioned LightGBM model, vocabulary, metadata, and integrity manifest used at runtime |
 | `deploy/compose/` | Optional Compose profiles for ZAP, monitoring, VPS, and end-to-end testing |
 | `deploy/caddy/` | Reverse-proxy configuration for the VPS profile |
 | `deploy/monitoring/` | Prometheus and Grafana configuration |
 | `benchmarks/` | Transparent page-level model regression corpus and its claim boundaries |
 | `docs/` | Usage, pipeline, and model documentation |
 | `infra/terraform/` | Optional single-VPS Hetzner provisioning |
-| `scripts/` | Build-time artifact preparation and end-to-end test runner |
+| `scripts/` | Model bundle preparation/verification, benchmarks, and end-to-end test runner |
 | `tests/` | Unit tests and the isolated end-to-end fixture |
 
 ## Operations
@@ -205,7 +208,7 @@ clean result.
 | Target safety | URL normalization, DNS and redirect checks, same-origin boundaries, size limits, and private-network blocking by default |
 | Health | `/healthz` for the API process, `/readyz` for Redis and model readiness, plus an independent worker health check |
 | Observability | JSON logs, `X-Request-ID` correlation, Prometheus metrics, and an optional Grafana dashboard |
-| Reproducibility | Pinned model artifacts, immutable ZAP image digest, versioned GHCR images, and a deploy script that rejects `latest` |
+| Reproducibility | Repository-versioned model bundle with SHA-256 verification, immutable ZAP image digest, versioned GHCR images, and a deploy script that rejects `latest` |
 
 Important local endpoints:
 

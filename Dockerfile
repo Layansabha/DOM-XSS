@@ -1,17 +1,3 @@
-FROM python:3.12-slim-bookworm AS artifact-builder
-
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
-
-WORKDIR /build
-
-COPY scripts/prepare_artifacts.py ./prepare_artifacts.py
-
-# Fetch only commit-pinned native artifacts. No pickle deserialization or
-# training-time scikit-learn ABI is needed in the image build.
-RUN ARTIFACT_DIR=/artifacts python prepare_artifacts.py
-
-
 FROM mcr.microsoft.com/playwright/python:v1.61.0-noble AS runtime
 
 ARG APP_UID=10001
@@ -39,7 +25,13 @@ RUN groupadd --gid "${APP_GID}" app \
 
 COPY pyproject.toml README.md LICENSE ./
 COPY app ./app
-COPY --from=artifact-builder /artifacts ./artifacts
+COPY artifacts ./artifacts
+COPY scripts/verify_artifacts.py /tmp/verify_artifacts.py
+
+# Refuse to build an image when the committed model bundle is incomplete,
+# modified, or incompatible with the runtime feature contract.
+RUN python /tmp/verify_artifacts.py --artifact-dir /app/artifacts \
+    && rm /tmp/verify_artifacts.py
 
 RUN python -m venv "${VIRTUAL_ENV}" \
     && python -m pip install --upgrade "pip==26.1.2" \

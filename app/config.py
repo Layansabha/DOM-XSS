@@ -3,8 +3,13 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+CURRENT_MODEL_PATH = Path("/app/artifacts/lightgbm_grouped_model.txt")
+CURRENT_VOCAB_PATH = Path("/app/artifacts/vocab_top500_grouped.json")
+LEGACY_MODEL_PATH = Path("/app/artifacts/lightgbm_model.txt")
+LEGACY_VOCAB_PATH = Path("/app/artifacts/vocab_top500_filtered.json")
 
 
 class Settings(BaseSettings):
@@ -33,8 +38,8 @@ class Settings(BaseSettings):
     include_third_party_scripts: bool = False
     user_agent: str = "DOM-XSS-Pipeline/1.0"
 
-    ml_model_path: Path = Path("/app/artifacts/lightgbm_grouped_model.txt")
-    ml_vocab_path: Path = Path("/app/artifacts/vocab_top500_grouped.json")
+    ml_model_path: Path = CURRENT_MODEL_PATH
+    ml_vocab_path: Path = CURRENT_VOCAB_PATH
     ml_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     ml_max_code_units: int = Field(default=500, ge=1, le=5000)
     ml_max_code_unit_bytes: int = Field(default=250_000, ge=1_000, le=2_000_000)
@@ -45,6 +50,15 @@ class Settings(BaseSettings):
     zap_max_minutes: int = Field(default=10, ge=1, le=60)
     zap_attack_strength: str = "LOW"
     zap_alert_threshold: str = "MEDIUM"
+
+    @model_validator(mode="after")
+    def migrate_legacy_artifact_paths(self) -> Settings:
+        """Keep existing .env files working after the grouped-model upgrade."""
+        if self.ml_model_path == LEGACY_MODEL_PATH:
+            self.ml_model_path = CURRENT_MODEL_PATH
+        if self.ml_vocab_path == LEGACY_VOCAB_PATH:
+            self.ml_vocab_path = CURRENT_VOCAB_PATH
+        return self
 
 
 @lru_cache

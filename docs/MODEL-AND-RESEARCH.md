@@ -15,6 +15,12 @@ The deployed model is Layan Sabha's LightGBM derivative from
 [`Layansabha/Dom-xss-ML`](https://github.com/Layansabha/Dom-xss-ML), not the
 paper's TensorFlow DNN.
 
+The runtime bundle is committed under [`artifacts/`](../artifacts/) so a
+container build does not depend on an external download. Its manifest records
+the exact source commit, Git blob identifiers, and SHA-256 digests. Both CI and
+the Docker build reject a missing or modified model, vocabulary, or metadata
+file.
+
 ## Compatibility audit
 
 | Research contract | This pipeline | Status |
@@ -33,6 +39,8 @@ paper's TensorFlow DNN.
 
 - The runtime loads the exact model and vocabulary from the same pinned
   `Dom-xss-ML` commit.
+- The committed runtime bundle is checked against
+  `artifacts/artifact-manifest.json` before it can be packaged.
 - Vocabulary indexes must be contiguous and unique.
 - LightGBM's feature count must equal vocabulary size before the application
   becomes ready.

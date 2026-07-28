@@ -39,6 +39,24 @@ docker compose -f compose.yaml -f deploy/compose/zap.yaml up --build -d --remove
 
 Later starts reuse the local images.
 
+### Upgrade an existing checkout
+
+Pull the current code, keep the existing `.env`, and rebuild the application
+image:
+
+```bash
+git pull --ff-only
+docker compose down --remove-orphans
+docker compose up --build -d --remove-orphans
+curl -fsS http://127.0.0.1:8000/readyz
+```
+
+Existing `.env` files that still use
+`/app/artifacts/lightgbm_model.txt` and
+`/app/artifacts/vocab_top500_filtered.json` are migrated to the grouped
+artifact paths by the application. New installations should use the paths in
+`.env.example`.
+
 ## Scan modes
 
 | Mode | Behaviour |
@@ -88,6 +106,16 @@ curl -i http://127.0.0.1:8000/readyz
 
 A healthy API does not by itself prove that scans are being processed. Check the
 worker health and queue depth when troubleshooting delayed jobs.
+
+If `/readyz` returns `503`, check the API logs before submitting a scan:
+
+```bash
+docker compose logs --no-color --tail=100 api
+docker compose exec -T worker python -c \
+  'from app.services.ml import get_model_service; model=get_model_service(); print(model.model.num_feature(), len(model.vocabulary))'
+```
+
+A valid bundled model prints `500 500`.
 
 ## Structured logs
 
@@ -192,7 +220,7 @@ make down
 
 Pull requests run:
 
-1. Ruff, mypy, pytest, and pip-audit
+1. bundled-model integrity verification, Ruff, mypy, pytest, and pip-audit
 2. Terraform format, validation, and tests
 3. Compose configuration validation
 4. application image build

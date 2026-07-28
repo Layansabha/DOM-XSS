@@ -1,0 +1,34 @@
+{
+  "runtime_artifacts": {
+    "lightgbm_grouped_metadata.json": {
+      "sha256": "c7f9a50b750032610ca1ade7b365380a2fc5133bee3ee4b113c2f3468866048c"
+    },
+    "lightgbm_grouped_model.txt": {
+      "sha256": "3019a4a0c1b436d9584c673ea9a09b3d186299e57e26f2decd5e7b8204c23fd1"
+    },
+    "vocab_top500_grouped.json": {
+      "sha256": "8affb6064270db830e5117f79700ebc707def462478383cec8f654bd90077ba1"
+    }
+  },
+  "source_artifacts": {
+    "metadata": {
+      "git_blob_sha": "6457f73d5cd2fab8c179d62b2d5634a9fcd4af33",
+      "path": "models/lightgbm_grouped_metadata.json",
+      "sha256": "c7f9a50b750032610ca1ade7b365380a2fc5133bee3ee4b113c2f3468866048c",
+      "size": 3319
+    },
+    "model": {
+      "git_blob_sha": "a721cd648fcee6467c3864b94f98841f595f51ff",
+      "path": "models/lightgbm_grouped_model.txt",
+      "sha256": "3019a4a0c1b436d9584c673ea9a09b3d186299e57e26f2decd5e7b8204c23fd1",
+      "size": 1016695
+    },
+    "vocabulary": {
+      "git_blob_sha": "d54e409b236c982762ed19b1a6ec72857812fc1e",
+      "path": "preprocessing/vocab_top500_grouped.json",
+      "sha256": "8affb6064270db830e5117f79700ebc707def462478383cec8f654bd90077ba1",
+      "size": 9239
+    }
+  },
+  "source_commit": "f3eff79a4b695ea9c36edf810917889c3b05e9a7"
+}

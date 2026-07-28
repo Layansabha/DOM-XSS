@@ -88,6 +88,7 @@ async def test_create_scan_rejects_when_queue_is_full(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     queue = SimpleNamespace(count=main.settings.max_queued_scans)
+    monkeypatch.setattr(main, "get_model_service", lambda: object())
     monkeypatch.setattr(main, "get_queue", lambda: queue)
 
     with pytest.raises(HTTPException) as caught:
@@ -103,6 +104,35 @@ async def test_create_scan_rejects_when_queue_is_full(
     assert caught.value.status_code == 429
     assert caught.value.headers == {"Retry-After": "30"}
     assert caught.value.detail == "scan queue is at capacity; try again later"
+
+
+@pytest.mark.asyncio
+async def test_create_scan_rejects_before_queue_when_model_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_model() -> None:
+        raise main.ModelArtifactError("model artifact not found: /private/path")
+
+    monkeypatch.setattr(main, "get_model_service", missing_model)
+    monkeypatch.setattr(
+        main,
+        "get_queue",
+        lambda: pytest.fail("queue must not be used when the model is unavailable"),
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        await main.create_scan(
+            ScanRequest(
+                target_url="https://example.com/",
+                scope_mode="auto",
+                dynamic_verification=False,
+            ),
+            _request(),
+        )
+
+    assert caught.value.status_code == 503
+    assert caught.value.detail == "ML model is unavailable"
+    assert "/private/path" not in caught.value.detail
 
 
 @pytest.mark.asyncio
